@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hollow Creek Farm - FS25 Dashboard</title>
-    <!-- Zuverlässiges Alternativ-CDN (Kein jsdelivr!) -->
-    <script src="https://unpkg.com"></script>
-    <script src="https://unpkg.com"></script>
+    <!-- Tailwind (Play-CDN) und Supabase JS Client -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <style>
         body { background-color: #1A1917; color: #F3F4F6; font-family: ui-sans-serif, system-ui, sans-serif; }
         .bg-farm-green { background-color: #2A4523; }
@@ -75,7 +75,7 @@
             <section class="lg:col-span-2 bg-[#242320] border border-stone-800 p-6 rounded-xl space-y-4">
                 <h2 class="text-xl font-bold text-white">Feldkarte & Übersicht</h2>
                 <div id="fieldsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <!-- Wird dynamisch aus Supabase befüllt -->
+                    <!-- Wird dynamisch befüllt -->
                 </div>
             </section>
 
@@ -92,11 +92,11 @@
 
     <!-- JAVASCRIPT-LOGIK -->
     <script>
-        // TRAGE HIER DEINE ECHTEN ZUGANGSDATEN AUS SUPABASE EIN!
+        // HIER DEINE ECHTEN CRUNCH-DATEN AUS SUPABASE EINTRAGEN
         const SUPABASE_URL = "DEINE_SUPABASE_URL";
         const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
         
-        // REPARATUR: Greift absolut sicher über den globalen Window-Scope von unpkg auf Supabase zu
+        // Nutzt den sicheren lokalen Scope
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentUser = null;
 
