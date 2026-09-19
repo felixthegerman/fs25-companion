@@ -1,153 +1,256 @@
 require('dotenv').config();
+
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const axios = require('axios');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
-// VERIFIKATION DER VARIABLEN (Verhindert Absturz und zeigt genauen Fehler im Log)
-const supabaseUrl = process.env.SUPABASE_URL;
-// .env / README verwenden SUPABASE_SECRET_KEY - mit Fallback auf den alten Namen, falls irgendwo noch so gesetzt.
-const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const requiredEnvironmentVariables = [
+    'DISCORD_CLIENT_ID',
+    'DISCORD_CLIENT_SECRET',
+    'SESSION_SECRET',
+    'SUPABASE_URL',
+    'SUPABASE_SECRET_KEY',
+];
 
-// Fallback: falls DISCORD_REDIRECT_URI nicht gesetzt ist, aus APP_URL ableiten.
-const discordRedirectUri = process.env.DISCORD_REDIRECT_URI
-    || (process.env.APP_URL ? `${process.env.APP_URL}/api/auth/callback` : undefined);
-
-if (!supabaseUrl || !supabaseKey) {
-    console.error("❌ CRITICAL ERROR: Supabase-Schlüssel wurden von Render nicht geladen!");
-    console.error("Bitte überprüfe deine Umgebungsvariablen im Render-Dashboard auf Rechtschreibung:");
-    console.error("SUPABASE_URL =", supabaseUrl ? "✅ Geladen" : "❌ FEHLT ODER LEER");
-    console.error("SUPABASE_SECRET_KEY =", supabaseKey ? "✅ Geladen" : "❌ FEHLT ODER LEER");
-    process.exit(1); 
+const missingEnvironmentVariables = requiredEnvironmentVariables.filter((name) => !process.env[name]);
+if (missingEnvironmentVariables.length > 0) {
+    console.error(`Fehlende Umgebungsvariablen: ${missingEnvironmentVariables.join(', ')}`);
+    process.exit(1);
 }
 
+const appUrl = process.env.APP_URL?.replace(/\/+$/, '');
+const discordRedirectUri = process.env.DISCORD_REDIRECT_URI || (appUrl
+    ? `${appUrl}/api/auth/callback`
+    : undefined);
+
 if (!discordRedirectUri) {
-    console.error("❌ CRITICAL ERROR: Weder DISCORD_REDIRECT_URI noch APP_URL ist gesetzt!");
-    console.error("Bitte DISCORD_REDIRECT_URI (z.B. https://dein-service.onrender.com/api/auth/callback) setzen.");
+    console.error('DISCORD_REDIRECT_URI oder APP_URL muss gesetzt sein.');
+    process.exit(1);
+}
+
+try {
+    new URL(discordRedirectUri);
+} catch {
+    console.error('DISCORD_REDIRECT_URI ist keine gültige URL.');
     process.exit(1);
 }
 
 const app = express();
-app.set('trust proxy', 1); // Render sitzt hinter einem Reverse-Proxy
-app.use(express.json());
-app.use(express.static(path.join(__dirname)));
-
-// Supabase Client mit den verifizierten Variablen erstellen
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-app.use(session({
-    secret: 'fs25-tracker-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, sameSite: 'lax' } // Auf secure:true setzen, falls du später HTTPS erzwingen willst
-}));
-
-// API: Discord Login-Weiterleitung
-app.get('/api/auth/login', (req, res) => {
-    const redirectUri = encodeURIComponent(discordRedirectUri);
-    const url = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=identify`;
-    res.redirect(url);
+const isProduction = process.env.NODE_ENV === 'production' || discordRedirectUri.startsWith('https://');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// API: Discord OAuth2 Callback
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(express.json());
+app.use(session({
+    name: 'fs25.sid',
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    },
+}));
+
+function avatarUrl(discordUser) {
+    if (!discordUser.avatar) {
+        const index = Number((BigInt(discordUser.id) >> 22n) % 6n);
+        return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+    }
+
+    const extension = discordUser.avatar.startsWith('a_') ? 'gif' : 'png';
+    return `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.${extension}`;
+}
+
+function sessionUser(databaseUser) {
+    return {
+        id: databaseUser.discord_id,
+        username: databaseUser.global_name || databaseUser.username,
+        avatar: databaseUser.avatar_url,
+        status: databaseUser.status,
+        is_approved: databaseUser.status === 'approved',
+        is_admin: databaseUser.is_admin,
+    };
+}
+
+function redirectWithError(res, error) {
+    res.redirect(`/?error=${encodeURIComponent(error)}`);
+}
+
+app.get('/api/auth/login', (req, res) => {
+    const state = crypto.randomBytes(32).toString('base64url');
+    req.session.oauthState = state;
+
+    const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
+    authorizeUrl.search = new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        redirect_uri: discordRedirectUri,
+        response_type: 'code',
+        scope: 'identify',
+        state,
+        prompt: 'consent',
+    }).toString();
+
+    req.session.save((error) => {
+        if (error) {
+            console.error('[auth/login] Session konnte nicht gespeichert werden:', error.message);
+            return redirectWithError(res, 'session_failed');
+        }
+        res.redirect(authorizeUrl.toString());
+    });
+});
+
 app.get('/api/auth/callback', async (req, res) => {
-    const { code } = req.query;
-    console.log('[auth/callback] aufgerufen, code vorhanden:', !!code);
-    if (!code) return res.redirect('/?error=no_code');
+    const { code, state, error: discordError } = req.query;
+    const expectedState = req.session.oauthState;
+    delete req.session.oauthState;
+
+    if (discordError) return redirectWithError(res, 'discord_denied');
+    if (!code) return redirectWithError(res, 'no_code');
+    if (!state || !expectedState || state !== expectedState) {
+        return redirectWithError(res, 'invalid_state');
+    }
 
     try {
-        // Token von Discord holen
-        console.log('[auth/callback] tausche code gegen token, redirect_uri =', discordRedirectUri);
-        const tokenResponse = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
-            client_id: process.env.DISCORD_CLIENT_ID,
-            client_secret: process.env.DISCORD_CLIENT_SECRET,
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: discordRedirectUri,
-        }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        console.log('[auth/callback] token erhalten');
+        const tokenResponse = await axios.post(
+            'https://discord.com/api/oauth2/token',
+            new URLSearchParams({
+                client_id: process.env.DISCORD_CLIENT_ID,
+                client_secret: process.env.DISCORD_CLIENT_SECRET,
+                grant_type: 'authorization_code',
+                code: String(code),
+                redirect_uri: discordRedirectUri,
+            }),
+            {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 10000,
+            },
+        );
 
-        // User-Daten abfragen
         const userResponse = await axios.get('https://discord.com/api/users/@me', {
-            headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` }
+            headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` },
+            timeout: 10000,
         });
 
         const discordUser = userResponse.data;
-        console.log('[auth/callback] discord user:', discordUser.id, discordUser.username);
         const isAdmin = discordUser.id === process.env.ADMIN_DISCORD_ID;
 
-        // In Supabase prüfen oder neu anlegen
-        const { data: user, error } = await supabase
-            .from('users')
+        const { data: existingUser, error: selectError } = await supabase
+            .from('discord_users')
             .select('*')
             .eq('discord_id', discordUser.id)
-            .single();
+            .maybeSingle();
 
-        if (error) console.log('[auth/callback] supabase select error (normal falls neuer user):', error.message);
+        if (selectError) throw selectError;
 
-        if (!user) {
-            const { error: insertError } = await supabase.from('users').insert({
-                discord_id: discordUser.id,
-                username: discordUser.username,
-                avatar: discordUser.avatar,
-                is_approved: isAdmin, // Admin ist automatisch freigeschaltet
-                is_admin: isAdmin
-            });
-            if (insertError) console.error('[auth/callback] supabase insert error:', insertError.message);
-        }
-
-        // Session setzen
-        req.session.user = {
-            id: discordUser.id,
+        const userRecord = {
+            discord_id: discordUser.id,
             username: discordUser.username,
-            avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
-            is_approved: user ? user.is_approved : isAdmin,
-            is_admin: isAdmin
+            global_name: discordUser.global_name || null,
+            avatar_hash: discordUser.avatar || null,
+            status: isAdmin ? 'approved' : (existingUser?.status || 'pending'),
+            is_admin: isAdmin,
+            updated_at: new Date().toISOString(),
         };
 
-        req.session.save((saveErr) => {
-            if (saveErr) {
-                console.error('[auth/callback] session.save fehlgeschlagen:', saveErr);
-                return res.redirect('/?error=session_failed');
+        const { data: savedUser, error: upsertError } = await supabase
+            .from('discord_users')
+            .upsert(userRecord, { onConflict: 'discord_id' })
+            .select('*')
+            .single();
+
+        if (upsertError) throw upsertError;
+
+        req.session.user = sessionUser({
+            ...savedUser,
+            avatar_url: avatarUrl(discordUser),
+        });
+
+        req.session.save((saveError) => {
+            if (saveError) {
+                console.error('[auth/callback] Session konnte nicht gespeichert werden:', saveError.message);
+                return redirectWithError(res, 'session_failed');
             }
-            console.log('[auth/callback] session gesetzt für', discordUser.username, '- approved:', req.session.user.is_approved);
             res.redirect('/');
         });
-    } catch (err) {
-        console.error('[auth/callback] FEHLER:', err.response ? err.response.data : err.message);
-        res.redirect('/?error=auth_failed');
+    } catch (error) {
+        const details = error.response?.data || error.message;
+        console.error('[auth/callback] Anmeldung fehlgeschlagen:', details);
+        redirectWithError(res, 'auth_failed');
     }
 });
 
-// API: Aktuellen Session-Status abfragen
-app.get('/api/auth/me', (req, res) => {
-    console.log('[auth/me] session vorhanden:', !!req.session.user, '- cookie header:', !!req.headers.cookie);
+app.get('/api/auth/me', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
     if (!req.session.user) return res.json({ loggedIn: false });
-    res.json({ loggedIn: true, user: req.session.user });
+
+    try {
+        const { data: databaseUser, error } = await supabase
+            .from('discord_users')
+            .select('*')
+            .eq('discord_id', req.session.user.id)
+            .single();
+
+        if (error) throw error;
+
+        req.session.user = sessionUser({
+            ...databaseUser,
+            avatar_url: req.session.user.avatar,
+        });
+        res.json({ loggedIn: true, user: req.session.user });
+    } catch (error) {
+        console.error('[auth/me] Benutzerstatus konnte nicht geladen werden:', error.message);
+        res.status(503).json({ loggedIn: false, error: 'database_unavailable' });
+    }
 });
 
-// API: Admin schaltet Spieler frei
 app.post('/api/admin/approve', async (req, res) => {
-    if (!req.session.user || !req.session.user.is_admin) return res.status(403).json({ error: 'Unauthorized' });
-    const { target_discord_id, approve } = req.body;
-    
-    const { error } = await supabase
-        .from('users')
-        .update({ is_approved: approve })
-        .eq('discord_id', target_discord_id);
+    if (!req.session.user?.is_admin) return res.status(403).json({ error: 'Unauthorized' });
 
-    if (error) return res.status(500).json({ error: error.message });
+    const { target_discord_id: targetDiscordId, approve } = req.body;
+    if (!/^\d{17,20}$/.test(String(targetDiscordId || ''))) {
+        return res.status(400).json({ error: 'Ungültige Discord-ID' });
+    }
+    if (String(targetDiscordId) === req.session.user.id) {
+        return res.status(400).json({ error: 'Der Admin kann sich nicht selbst sperren.' });
+    }
+
+    const { error } = await supabase
+        .from('discord_users')
+        .update({
+            status: approve ? 'approved' : 'blocked',
+            updated_at: new Date().toISOString(),
+        })
+        .eq('discord_id', String(targetDiscordId));
+
+    if (error) return res.status(500).json({ error: 'Freigabe konnte nicht gespeichert werden.' });
     res.json({ success: true });
 });
 
-// API: Logout
-app.get('/api/auth/logout', (req, res) => {
-    req.session.destroy();
-    res.redirect('/');
+app.get('/api/public-config', (req, res) => {
+    res.json({
+        supabaseUrl: process.env.SUPABASE_URL,
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || null,
+    });
 });
 
-// Health-Check für Render (siehe render.yaml -> healthCheckPath)
-app.get('/healthz', (req, res) => res.status(200).send('ok'));
+app.get('/api/auth/logout', (req, res) => {
+    req.session.destroy(() => {
+        res.clearCookie('fs25.sid');
+        res.redirect('/');
+    });
+});
 
-app.listen(process.env.PORT || 10000, () => console.log(`Server läuft auf Port ${process.env.PORT || 10000}`));
+app.get('/healthz', (req, res) => res.status(200).send('ok'));
+app.use(express.static(path.join(__dirname)));
+
+const port = process.env.PORT || 10000;
+app.listen(port, () => console.log(`Server läuft auf Port ${port}`));

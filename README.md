@@ -54,6 +54,8 @@ ADMIN_DISCORD_ID=1124793204588433518
 SESSION_SECRET=...
 SUPABASE_URL=...
 SUPABASE_SECRET_KEY=...
+# Optional für die Live-Feldansicht im Browser (der öffentliche Anon-Key, nie der Secret Key):
+SUPABASE_ANON_KEY=...
 ```
 
 Dann:
@@ -83,6 +85,7 @@ Am einfachsten ist GitHub + Render:
    - `SESSION_SECRET=...`
    - `SUPABASE_URL=...`
    - `SUPABASE_SECRET_KEY=...`
+   - optional `SUPABASE_ANON_KEY=...` für die Live-Feldansicht
 7. Deploy starten.
 8. Danach die Produktion-Callback-URL im Discord Developer Portal exakt auf `APP_URL + /api/auth/callback` setzen.
 

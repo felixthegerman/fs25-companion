@@ -20,6 +20,7 @@
         <div class="bg-[#242320] border border-stone-700 p-8 rounded-xl shadow-2xl max-w-md w-full text-center space-y-6">
             <h2 class="text-2xl font-black text-amber-500 tracking-wider">HOLLOW CREEK FARM</h2>
             <p class="text-sm text-stone-300">Melde dich mit deinem Discord-Konto an, um auf das Live-Dashboard des Servers zuzugreifen.</p>
+            <p id="authError" class="hidden rounded-lg border border-red-800 bg-red-950/60 p-3 text-sm text-red-200"></p>
             <a href="/api/auth/login" class="inline-block w-full py-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold rounded-lg transition shadow-lg text-center tracking-wide">
                 Mit Discord anmelden
             </a>
@@ -92,13 +93,44 @@
 
     <!-- JAVASCRIPT-LOGIK -->
     <script>
-        // HIER DEINE ECHTEN CRUNCH-DATEN AUS SUPABASE EINTRAGEN
-        const SUPABASE_URL = "DEINE_SUPABASE_URL";
-        const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
-        
-        // Nutzt den sicheren lokalen Scope
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = null;
         let currentUser = null;
+
+        const authErrors = {
+            auth_failed: 'Die Discord-Anmeldung ist fehlgeschlagen. Bitte versuche es erneut.',
+            discord_denied: 'Die Anmeldung wurde bei Discord abgebrochen.',
+            invalid_state: 'Die Anmeldesitzung ist abgelaufen. Bitte starte die Anmeldung erneut.',
+            no_code: 'Discord hat keinen Anmeldecode zurückgegeben.',
+            session_failed: 'Die Sitzung konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        };
+
+        function showAuthError() {
+            const errorCode = new URLSearchParams(window.location.search).get('error');
+            if (!errorCode) return;
+
+            const element = document.getElementById('authError');
+            element.textContent = authErrors[errorCode] || 'Die Anmeldung konnte nicht abgeschlossen werden.';
+            element.classList.remove('hidden');
+            window.history.replaceState({}, document.title, '/');
+        }
+
+        async function initSupabase() {
+            if (supabaseClient) return true;
+
+            try {
+                const response = await fetch('/api/public-config');
+                const config = await response.json();
+                if (!config.supabaseUrl || !config.supabaseAnonKey) {
+                    console.warn('Live-Daten sind deaktiviert: SUPABASE_ANON_KEY fehlt.');
+                    return false;
+                }
+                supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                return true;
+            } catch (error) {
+                console.error('Supabase-Konfiguration konnte nicht geladen werden:', error);
+                return false;
+            }
+        }
 
         async function checkAuth() {
             try {
@@ -121,6 +153,7 @@
                     if (loginOverlay) loginOverlay.classList.add('hidden');
                     if (waitingOverlay) waitingOverlay.classList.remove('hidden');
                     if (dashboard) dashboard.classList.add('blur-bg');
+                    window.setTimeout(checkAuth, 10000);
                     return;
                 }
 
@@ -136,14 +169,17 @@
                     userStatusEl.classList.add('inline-flex');
                 }
 
-                initRealtime();
-                loadFieldsFromDatabase();
+                if (await initSupabase()) {
+                    initRealtime();
+                    loadFieldsFromDatabase();
+                }
             } catch (err) {
                 console.error("Auth-Check fehlgeschlagen:", err);
             }
         }
 
         function initRealtime() {
+            if (!supabaseClient) return;
             supabaseClient.channel('public:fields').on('postgres_changes', { event: '*', schema: 'public', table: 'fields' }, () => {
                 loadFieldsFromDatabase();
             }).subscribe();
@@ -157,6 +193,7 @@
         }
 
         async function loadFieldsFromDatabase() {
+            if (!supabaseClient) return;
             const { data: fields } = await supabaseClient.from('fields').select('*').order('field_number', { ascending: true });
             const grid = document.getElementById('fieldsGrid');
             if (!grid) return;
@@ -187,7 +224,10 @@
             });
         }
 
-        window.onload = checkAuth;
+        window.addEventListener('DOMContentLoaded', () => {
+            showAuthError();
+            checkAuth();
+        });
     </script>
 </body>
 </html>
