@@ -10,6 +10,7 @@ const { createClient } = require('@supabase/supabase-js');
 const requiredEnvironmentVariables = [
     'DISCORD_CLIENT_ID',
     'DISCORD_CLIENT_SECRET',
+    'ADMIN_DISCORD_ID',
     'SESSION_SECRET',
     'SUPABASE_URL',
     'SUPABASE_SECRET_KEY',
@@ -71,13 +72,54 @@ function avatarUrl(discordUser) {
 }
 
 function sessionUser(databaseUser) {
+    const isSuperAdmin = databaseUser.discord_id === process.env.ADMIN_DISCORD_ID;
     return {
         id: databaseUser.discord_id,
         username: databaseUser.global_name || databaseUser.username,
         avatar: databaseUser.avatar_url,
         status: databaseUser.status,
         is_approved: databaseUser.status === 'approved',
-        is_admin: databaseUser.is_admin,
+        is_admin: isSuperAdmin || databaseUser.is_admin,
+        is_super_admin: isSuperAdmin,
+        permissions: {
+            can_create_tasks: isSuperAdmin || Boolean(databaseUser.can_create_tasks),
+            can_delete_tasks: isSuperAdmin || Boolean(databaseUser.can_delete_tasks),
+            can_manage_users: isSuperAdmin || Boolean(databaseUser.can_manage_users),
+        },
+    };
+}
+
+function avatarUrlFromRecord(user) {
+    return avatarUrl({ id: user.discord_id, avatar: user.avatar_hash });
+}
+
+function requireApprovedPermission(permission) {
+    return async (req, res, next) => {
+        if (!req.session.user?.id) return res.status(401).json({ error: 'Nicht angemeldet.' });
+
+        try {
+            const { data: databaseUser, error } = await supabase
+                .from('discord_users')
+                .select('*')
+                .eq('discord_id', req.session.user.id)
+                .single();
+
+            if (error || !databaseUser) throw error || new Error('Benutzer nicht gefunden.');
+            req.session.user = sessionUser({ ...databaseUser, avatar_url: req.session.user.avatar });
+
+            if (!req.session.user.is_approved) {
+                return res.status(403).json({ error: 'Der Benutzer ist nicht freigeschaltet.' });
+            }
+            if (permission && !req.session.user.permissions[permission]) {
+                return res.status(403).json({ error: 'Dafür fehlt die Berechtigung.' });
+            }
+
+            req.databaseUser = databaseUser;
+            next();
+        } catch (error) {
+            console.error('[authorization] Berechtigungen konnten nicht geprüft werden:', error?.message);
+            res.status(503).json({ error: 'Berechtigungen konnten nicht geprüft werden.' });
+        }
     };
 }
 
@@ -158,6 +200,9 @@ app.get('/api/auth/callback', async (req, res) => {
             avatar_hash: discordUser.avatar || null,
             status: isAdmin ? 'approved' : (existingUser?.status || 'pending'),
             is_admin: isAdmin,
+            can_create_tasks: isAdmin || Boolean(existingUser?.can_create_tasks),
+            can_delete_tasks: isAdmin || Boolean(existingUser?.can_delete_tasks),
+            can_manage_users: isAdmin || Boolean(existingUser?.can_manage_users),
             updated_at: new Date().toISOString(),
         };
 
@@ -212,26 +257,143 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
-app.post('/api/admin/approve', async (req, res) => {
-    if (!req.session.user?.is_admin) return res.status(403).json({ error: 'Unauthorized' });
-
-    const { target_discord_id: targetDiscordId, approve } = req.body;
-    if (!/^\d{17,20}$/.test(String(targetDiscordId || ''))) {
-        return res.status(400).json({ error: 'Ungültige Discord-ID' });
-    }
-    if (String(targetDiscordId) === req.session.user.id) {
-        return res.status(400).json({ error: 'Der Admin kann sich nicht selbst sperren.' });
-    }
-
-    const { error } = await supabase
+app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    const { data: users, error } = await supabase
         .from('discord_users')
-        .update({
-            status: approve ? 'approved' : 'blocked',
-            updated_at: new Date().toISOString(),
-        })
-        .eq('discord_id', String(targetDiscordId));
+        .select('discord_id,username,global_name,avatar_hash,status,is_admin,can_create_tasks,can_delete_tasks,can_manage_users,created_at,updated_at')
+        .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json({ error: 'Freigabe konnte nicht gespeichert werden.' });
+    if (error) return res.status(500).json({ error: 'Benutzer konnten nicht geladen werden.' });
+    res.json({
+        users: users.map((user) => ({
+            ...user,
+            display_name: user.global_name || user.username,
+            avatar: avatarUrlFromRecord(user),
+            is_super_admin: user.discord_id === process.env.ADMIN_DISCORD_ID,
+        })),
+    });
+});
+
+app.patch('/api/admin/users/:discordId/status', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    const targetDiscordId = String(req.params.discordId || '');
+    const status = String(req.body.status || '');
+    if (!/^\d{17,20}$/.test(targetDiscordId)) return res.status(400).json({ error: 'Ungültige Discord-ID.' });
+    if (!['pending', 'approved', 'rejected', 'blocked'].includes(status)) {
+        return res.status(400).json({ error: 'Ungültiger Benutzerstatus.' });
+    }
+    if (targetDiscordId === process.env.ADMIN_DISCORD_ID) {
+        return res.status(400).json({ error: 'Der Hauptadmin kann nicht gesperrt oder abgelehnt werden.' });
+    }
+    if (targetDiscordId === req.session.user.id) {
+        return res.status(400).json({ error: 'Du kannst deinen eigenen Zugang nicht ändern.' });
+    }
+
+    const { data: user, error } = await supabase
+        .from('discord_users')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('discord_id', targetDiscordId)
+        .select('discord_id,status')
+        .single();
+
+    if (error) return res.status(500).json({ error: 'Benutzerstatus konnte nicht gespeichert werden.' });
+    res.json({ user });
+});
+
+app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    if (!req.session.user.is_super_admin) {
+        return res.status(403).json({ error: 'Nur der Hauptadmin darf Rechte vergeben.' });
+    }
+
+    const targetDiscordId = String(req.params.discordId || '');
+    if (!/^\d{17,20}$/.test(targetDiscordId)) return res.status(400).json({ error: 'Ungültige Discord-ID.' });
+    if (targetDiscordId === process.env.ADMIN_DISCORD_ID) {
+        return res.status(400).json({ error: 'Die Rechte des Hauptadmins sind fest vergeben.' });
+    }
+
+    const permissions = req.body.permissions || {};
+    const update = {
+        can_create_tasks: permissions.can_create_tasks === true,
+        can_delete_tasks: permissions.can_delete_tasks === true,
+        can_manage_users: permissions.can_manage_users === true,
+        updated_at: new Date().toISOString(),
+    };
+    const { data: user, error } = await supabase
+        .from('discord_users')
+        .update(update)
+        .eq('discord_id', targetDiscordId)
+        .select('discord_id,can_create_tasks,can_delete_tasks,can_manage_users')
+        .single();
+
+    if (error) return res.status(500).json({ error: 'Berechtigungen konnten nicht gespeichert werden.' });
+    res.json({ user });
+});
+
+app.get('/api/tasks', requireApprovedPermission(), async (req, res) => {
+    const { data: tasks, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: 'Aufgaben konnten nicht geladen werden.' });
+    res.json({
+        tasks: tasks.map((task) => ({
+            id: task.id,
+            name: task.name,
+            field: task.field_number,
+            player: task.assigned_player,
+            urgency: task.urgency,
+            done: task.done,
+        })),
+    });
+});
+
+app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    const player = String(req.body.player || '').trim();
+    const field = req.body.field === null || req.body.field === '' ? null : Number(req.body.field);
+    const urgency = String(req.body.urgency || 'medium');
+    if (!name || name.length > 120) return res.status(400).json({ error: 'Der Aufgabenname ist ungültig.' });
+    if (player.length > 64) return res.status(400).json({ error: 'Der Spielername ist zu lang.' });
+    if (field !== null && (!Number.isInteger(field) || field < 1 || field > 999)) {
+        return res.status(400).json({ error: 'Die Feldnummer ist ungültig.' });
+    }
+    if (!['low', 'medium', 'high'].includes(urgency)) return res.status(400).json({ error: 'Die Dringlichkeit ist ungültig.' });
+
+    const { data: task, error } = await supabase.from('tasks').insert({
+        name,
+        field_number: field,
+        assigned_player: player || null,
+        urgency,
+        created_by: req.session.user.id,
+    }).select('*').single();
+
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht erstellt werden.' });
+    res.status(201).json({ task });
+});
+
+app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1 || typeof req.body.done !== 'boolean') {
+        return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    }
+
+    const { data: task, error } = await supabase
+        .from('tasks')
+        .update({ done: req.body.done, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('*')
+        .single();
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht aktualisiert werden.' });
+    res.json({ task });
+});
+
+app.delete('/api/tasks/completed', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
+    const { error } = await supabase.from('tasks').delete().eq('done', true);
+    if (error) return res.status(500).json({ error: 'Erledigte Aufgaben konnten nicht gelöscht werden.' });
+    res.json({ success: true });
+});
+
+app.delete('/api/tasks/:id', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht gelöscht werden.' });
     res.json({ success: true });
 });
 

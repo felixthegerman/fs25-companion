@@ -131,6 +131,16 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .auth-error { margin-top: 14px; padding: 9px 11px; border-radius: 8px; border: 1px solid rgba(217,128,95,.45); background: rgba(217,128,95,.1); color: #f0ad91; font-size: 13px; }
   .auth-spinner { width: 28px; height: 28px; margin: 20px auto 0; border: 3px solid var(--line); border-top-color: var(--lime); border-radius: 50%; animation: auth-spin .8s linear infinite; }
   @keyframes auth-spin { to { transform: rotate(360deg); } }
+  .status-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: color-mix(in srgb, var(--status-color) 18%, transparent); color: var(--status-color); }
+  .permission-grid { display: grid; grid-template-columns: repeat(3, minmax(110px, 1fr)); gap: 6px 12px; }
+  .permission-toggle { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .permission-toggle input { accent-color: var(--lime); width: 16px; height: 16px; }
+  .admin-action { padding: 5px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .admin-action:hover { color: var(--text); border-color: #5b554c; }
+  .admin-action.approve { color: var(--lime); }
+  .admin-action.reject, .admin-action.block { color: var(--clay); }
+  .admin-action:disabled, .permission-toggle input:disabled { opacity: .4; cursor: not-allowed; }
+  .admin-user-row + .admin-user-row { border-top: 1px solid var(--line); }
 
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .fcard, .switch, .switch .knob, .lang .thumb, .chk .box { transition: none; } }
 </style>
@@ -166,6 +176,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
       <a class="lnk" href="#map" data-i18n="navMap"></a>
       <a class="lnk" href="#machines" data-i18n="navMachines"></a>
       <a class="lnk" href="#tasks" data-i18n="navTasks"></a>
+      <a id="adminNav" class="lnk" href="#adminPanel" data-i18n="navAdmin" hidden></a>
     </nav>
     <div class="ml-auto flex items-center gap-3">
       <div id="players" class="hidden sm:flex -space-x-2"></div>
@@ -206,6 +217,26 @@ tailwind.config = { theme: { extend: { fontFamily: {
     </div>
   </section>
 
+  <!-- Admin dashboard -->
+  <section id="adminPanel" class="panel p-4 sm:p-5 mb-5" aria-labelledby="admin-h" hidden>
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div>
+        <h2 id="admin-h" class="h2" data-i18n="adminTitle"></h2>
+        <p class="muted text-sm mt-1" data-i18n="adminSub"></p>
+      </div>
+      <button id="adminReload" type="button" class="btn ghost" data-i18n="adminReload"></button>
+    </div>
+    <p id="adminFeedback" class="muted text-sm mb-3" role="status"></p>
+    <div class="overflow-auto rounded-lg border" style="border-color:var(--line)">
+      <div class="min-w-[900px]">
+        <div class="grid grid-cols-[minmax(220px,1.1fr)_130px_minmax(350px,1.5fr)_minmax(250px,1fr)] gap-4 px-4 py-2 text-xs muted border-b" style="border-color:var(--line)">
+          <span data-i18n="adminUser"></span><span data-i18n="adminStatus"></span><span data-i18n="adminPermissions"></span><span data-i18n="adminActions"></span>
+        </div>
+        <div id="adminUsers"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- Map + sidebar -->
   <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_310px] gap-5 mb-5">
     <section id="map" class="panel p-4 sm:p-5" aria-labelledby="map-h">
@@ -241,6 +272,8 @@ tailwind.config = { theme: { extend: { fontFamily: {
       <span id="task-sum" class="muted text-sm"></span>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-6">
+      <div>
+      <p id="taskPermissionNotice" class="muted text-sm mb-3" hidden data-i18n="noTaskCreatePermission"></p>
       <form id="taskForm" class="space-y-4" novalidate>
         <div>
           <label class="lbl" for="fName" data-i18n="fTask"></label>
@@ -262,6 +295,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
         </fieldset>
         <button type="submit" class="btn w-full"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="addTask"></span></button>
       </form>
+      </div>
 
       <div>
         <div class="overflow-auto rounded-lg border" style="max-height:340px;border-color:var(--line)">
@@ -296,7 +330,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
    ===================================================================== */
 const i18n = {
   en: {
-    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', langLabel: 'Language',
+    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', navAdmin: 'Admin', langLabel: 'Language',
     sub: 'Riverbend Springs, multiplayer server. Spring, day 14, 09:40 in game.',
     balance: 'Farm balance', income: 'Income this week', maint: 'Maintenance costs', net: 'Net this week',
     chartCap: 'Daily income and maintenance, days 8 to 14', chartAria: 'Bar chart of daily income and maintenance costs',
@@ -316,6 +350,13 @@ const i18n = {
     fUrgency: 'Urgency level', low: 'Low', medium: 'Medium', high: 'High', addTask: 'Add task', errTask: 'Enter a task name first.',
     colDone: 'Done', colTask: 'Task', colField: 'Field', colPlayer: 'Player', colUrgency: 'Urgency', colActions: 'Actions',
     removeTask: 'Remove task', clearDone: 'Clear completed', noTasks: 'No tasks yet. Add the first one with the form.', unassigned: 'Unassigned',
+    noTaskCreatePermission: 'You may view and complete tasks, but you do not have permission to create them.',
+    adminTitle: 'User administration', adminSub: 'Approve, reject or block website users and assign individual permissions.', adminReload: 'Reload',
+    adminUser: 'User', adminStatus: 'Status', adminPermissions: 'Permissions', adminActions: 'Access actions',
+    permCreate: 'Create tasks', permDelete: 'Delete tasks', permUsers: 'Manage users', savePermissions: 'Save permissions',
+    approveUser: 'Approve', rejectUser: 'Reject', blockUser: 'Block', resetPending: 'Set pending',
+    status_pending: 'Pending', status_approved: 'Approved', status_rejected: 'Rejected', status_blocked: 'Blocked', superAdmin: 'Primary admin', ownAccount: 'Own account',
+    adminOnlyPermissions: 'Only the primary admin can change permissions.', adminLoading: 'Loading users …', adminSaved: 'Changes saved.',
     p_plow: 'Plow', p_cultivate: 'Cultivate', p_sow: 'Sow', p_fertilize: 'Fertilize', p_harvest: 'Harvest', p_mow: 'Mow', p_bale: 'Bale', p_haul: 'Haul',
     seed1: 'Harvest the wheat', seed2: 'Fertilize the potatoes', seed3: 'Service the Claas Lexion',
     footer: 'Sample data for layout preview. Nothing here is connected to a live save yet.',
@@ -324,7 +365,7 @@ const i18n = {
       PARSNIP: 'Parsnips', REDBEET: 'Red beet', RICE: 'Rice', HEMP: 'Hemp', SPELT: 'Spelt' }
   },
   de: {
-    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', langLabel: 'Sprache',
+    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navAdmin: 'Admin', langLabel: 'Sprache',
     sub: 'Riverbend Springs, Multiplayer-Server. Frühling, Tag 14, 09:40 Uhr im Spiel.',
     balance: 'Kontostand', income: 'Einnahmen diese Woche', maint: 'Wartungskosten', net: 'Ergebnis diese Woche',
     chartCap: 'Tägliche Einnahmen und Wartung, Tag 8 bis 14', chartAria: 'Balkendiagramm der täglichen Einnahmen und Wartungskosten',
@@ -344,6 +385,13 @@ const i18n = {
     fUrgency: 'Dringlichkeit', low: 'Niedrig', medium: 'Mittel', high: 'Hoch', addTask: 'Aufgabe hinzufügen', errTask: 'Bitte zuerst einen Aufgabennamen eingeben.',
     colDone: 'Erledigt', colTask: 'Aufgabe', colField: 'Feld', colPlayer: 'Spieler', colUrgency: 'Dringlichkeit', colActions: 'Aktionen',
     removeTask: 'Aufgabe entfernen', clearDone: 'Erledigte entfernen', noTasks: 'Noch keine Aufgaben. Füge die erste mit dem Formular hinzu.', unassigned: 'Nicht zugewiesen',
+    noTaskCreatePermission: 'Du darfst Aufgaben ansehen und abhaken, hast aber kein Recht, neue Aufgaben zu erstellen.',
+    adminTitle: 'Benutzerverwaltung', adminSub: 'Website-Nutzer annehmen, ablehnen oder sperren und individuelle Rechte vergeben.', adminReload: 'Neu laden',
+    adminUser: 'Benutzer', adminStatus: 'Status', adminPermissions: 'Berechtigungen', adminActions: 'Zugriff verwalten',
+    permCreate: 'Aufgaben erstellen', permDelete: 'Aufgaben löschen', permUsers: 'Nutzer verwalten', savePermissions: 'Rechte speichern',
+    approveUser: 'Annehmen', rejectUser: 'Ablehnen', blockUser: 'Sperren', resetPending: 'Auf wartend setzen',
+    status_pending: 'Wartend', status_approved: 'Angenommen', status_rejected: 'Abgelehnt', status_blocked: 'Gesperrt', superAdmin: 'Hauptadmin', ownAccount: 'Eigenes Konto',
+    adminOnlyPermissions: 'Nur der Hauptadmin kann Berechtigungen ändern.', adminLoading: 'Benutzer werden geladen …', adminSaved: 'Änderungen gespeichert.',
     p_plow: 'Pflügen', p_cultivate: 'Grubbern', p_sow: 'Säen', p_fertilize: 'Düngen', p_harvest: 'Ernten', p_mow: 'Mähen', p_bale: 'Ballen pressen', p_haul: 'Transportieren',
     seed1: 'Weizen ernten', seed2: 'Kartoffeln düngen', seed3: 'Claas Lexion warten',
     footer: 'Beispieldaten für die Layout-Vorschau. Noch keine Verbindung zu einem Live-Spielstand.',
@@ -482,11 +530,11 @@ const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', '
 const URG_COLOR = { low: 'var(--sky)', medium: 'var(--gold)', high: 'var(--clay)' };
 const URG_RANK = { high: 0, medium: 1, low: 2 };
 
-let tasks = store.get('tasks') || [
-  { id: 1, nameKey: 'seed1', field: 7, player: 'Marta', urgency: 'high', done: false },
-  { id: 2, nameKey: 'seed2', field: 8, player: 'Kev', urgency: 'medium', done: false },
-  { id: 3, nameKey: 'seed3', field: null, player: 'Jonas', urgency: 'low', done: true }
-];
+let tasks = [];
+let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false };
+let currentIsSuperAdmin = false;
+let currentAuthUserId = null;
+let adminUsers = [];
 
 /* =====================================================================
    4. RENDERING
@@ -579,8 +627,35 @@ function renderFinance() {
 }
 
 /* ---------- Task board ---------- */
-const saveTasks = () => store.set('tasks', tasks);
 const taskName = x => (x.nameKey ? t(x.nameKey) : x.name);
+
+async function apiRequest(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Die Anfrage ist fehlgeschlagen.');
+  return data;
+}
+
+function applyTaskPermissions() {
+  $('taskForm').style.display = currentPermissions.can_create_tasks ? '' : 'none';
+  $('taskPermissionNotice').hidden = currentPermissions.can_create_tasks;
+  $('clearDone').style.display = currentPermissions.can_delete_tasks ? '' : 'none';
+  renderTasks();
+}
+
+async function loadTasks() {
+  try {
+    const data = await apiRequest('/api/tasks');
+    tasks = data.tasks || [];
+    renderTasks();
+  } catch (error) {
+    $('fErr').textContent = error.message;
+  }
+}
 
 function renderForm() {
   const sel = $('fField'), cur = sel.value;
@@ -599,32 +674,145 @@ function renderTasks(focusId) {
       <td>${x.field ? t('fieldN', { n: x.field }) : t('yard')}</td>
       <td>${x.player ? esc(x.player) : `<span class="muted">${t('unassigned')}</span>`}</td>
       <td><span class="urg" style="--c:${URG_COLOR[x.urgency]}">${t(x.urgency)}</span></td>
-      <td><button type="button" class="xbtn" data-del="${x.id}" aria-label="${t('removeTask')}">${uiSvg('x', 16)}</button></td></tr>`).join('')
+      <td>${currentPermissions.can_delete_tasks ? `<button type="button" class="xbtn" data-del="${x.id}" aria-label="${t('removeTask')}">${uiSvg('x', 16)}</button>` : ''}</td></tr>`).join('')
     : `<tr><td colspan="6" class="muted text-center" style="padding:28px 10px">${t('noTasks')}</td></tr>`;
   const done = tasks.filter(x => x.done).length;
   $('task-sum').textContent = t('taskSum', { o: tasks.length - done, d: done });
   if (focusId) { const c = document.querySelector(`input[data-id="${focusId}"]`); if (c) c.focus(); }
 }
 
-$('taskForm').addEventListener('submit', e => {
+$('taskForm').addEventListener('submit', async e => {
   e.preventDefault();
   const name = $('fName').value.trim();
   if (!name) { $('fErr').textContent = t('errTask'); $('fName').focus(); return; }
   $('fErr').textContent = '';
-  tasks.push({ id: Date.now(), name, field: $('fField').value ? +$('fField').value : null, player: $('fPlayer').value.trim(), urgency: document.querySelector('input[name="urg"]:checked').value, done: false });
-  saveTasks(); $('fName').value = ''; renderTasks(); $('fName').focus();
+  try {
+    await apiRequest('/api/tasks', { method: 'POST', body: JSON.stringify({
+      name,
+      field: $('fField').value ? +$('fField').value : null,
+      player: $('fPlayer').value.trim(),
+      urgency: document.querySelector('input[name="urg"]:checked').value
+    }) });
+    $('fName').value = '';
+    await loadTasks();
+    $('fName').focus();
+  } catch (error) {
+    $('fErr').textContent = error.message;
+  }
 });
-$('taskBody').addEventListener('change', e => {
+$('taskBody').addEventListener('change', async e => {
   const c = e.target.closest('input[data-id]'); if (!c) return;
-  const x = tasks.find(k => String(k.id) === c.dataset.id); if (x) x.done = c.checked;
-  saveTasks(); renderTasks(c.dataset.id);
+  try {
+    await apiRequest(`/api/tasks/${encodeURIComponent(c.dataset.id)}`, { method: 'PATCH', body: JSON.stringify({ done: c.checked }) });
+    const x = tasks.find(k => String(k.id) === c.dataset.id); if (x) x.done = c.checked;
+    renderTasks(c.dataset.id);
+  } catch (error) {
+    c.checked = !c.checked;
+    $('fErr').textContent = error.message;
+  }
 });
-$('taskBody').addEventListener('click', e => {
+$('taskBody').addEventListener('click', async e => {
   const b = e.target.closest('button[data-del]'); if (!b) return;
-  tasks = tasks.filter(k => String(k.id) !== b.dataset.del); saveTasks(); renderTasks();
+  try {
+    await apiRequest(`/api/tasks/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
+    tasks = tasks.filter(k => String(k.id) !== b.dataset.del);
+    renderTasks();
+  } catch (error) {
+    $('fErr').textContent = error.message;
+  }
 });
-$('clearDone').addEventListener('click', () => { tasks = tasks.filter(x => !x.done); saveTasks(); renderTasks(); });
+$('clearDone').addEventListener('click', async () => {
+  try {
+    await apiRequest('/api/tasks/completed', { method: 'DELETE' });
+    tasks = tasks.filter(x => !x.done);
+    renderTasks();
+  } catch (error) {
+    $('fErr').textContent = error.message;
+  }
+});
 $('fName').addEventListener('input', () => { $('fErr').textContent = ''; });
+
+/* ---------- Admin dashboard ---------- */
+const STATUS_COLOR = { pending: 'var(--gold)', approved: 'var(--lime)', rejected: 'var(--clay)', blocked: '#ef6b6b' };
+
+function permissionCheckbox(user, key, label) {
+  const disabled = !currentIsSuperAdmin || user.is_super_admin;
+  return `<label class="permission-toggle"><input type="checkbox" data-permission="${key}" ${user[key] ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span>${label}</span></label>`;
+}
+
+function renderAdminUsers() {
+  if (!currentPermissions.can_manage_users) return;
+  const order = { pending: 0, approved: 1, rejected: 2, blocked: 3 };
+  const users = [...adminUsers].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || new Date(b.created_at) - new Date(a.created_at));
+  $('adminUsers').innerHTML = users.map(user => {
+    const isSelf = user.discord_id === currentAuthUserId;
+    const locked = user.is_super_admin || isSelf;
+    const statusButtons = locked ? `<span class="muted text-xs">${t(user.is_super_admin ? 'superAdmin' : 'ownAccount')}</span>` : `
+      ${user.status !== 'approved' ? `<button class="admin-action approve" data-status="approved">${t('approveUser')}</button>` : ''}
+      ${user.status !== 'rejected' ? `<button class="admin-action reject" data-status="rejected">${t('rejectUser')}</button>` : ''}
+      ${user.status !== 'blocked' ? `<button class="admin-action block" data-status="blocked">${t('blockUser')}</button>` : ''}
+      ${user.status !== 'pending' ? `<button class="admin-action" data-status="pending">${t('resetPending')}</button>` : ''}`;
+    const saveButton = currentIsSuperAdmin && !user.is_super_admin
+      ? `<button class="admin-action" data-save-permissions>${t('savePermissions')}</button>`
+      : '';
+
+    return `<div class="admin-user-row grid grid-cols-[minmax(220px,1.1fr)_130px_minmax(350px,1.5fr)_minmax(250px,1fr)] gap-4 px-4 py-3 items-center" data-user-id="${esc(user.discord_id)}">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="${esc(user.avatar)}" alt="" class="h-9 w-9 rounded-full flex-none">
+        <div class="min-w-0"><div class="font-semibold text-sm truncate">${esc(user.display_name)}</div><div class="muted text-xs truncate">${esc(user.username)} · ${esc(user.discord_id)}</div></div>
+      </div>
+      <div><span class="status-badge" style="--status-color:${STATUS_COLOR[user.status] || 'var(--muted)'}">${t('status_' + user.status)}</span></div>
+      <div><div class="permission-grid">
+        ${permissionCheckbox(user, 'can_create_tasks', t('permCreate'))}
+        ${permissionCheckbox(user, 'can_delete_tasks', t('permDelete'))}
+        ${permissionCheckbox(user, 'can_manage_users', t('permUsers'))}
+      </div>${saveButton ? `<div class="mt-2">${saveButton}</div>` : ''}</div>
+      <div class="flex flex-wrap gap-2">${statusButtons}</div>
+    </div>`;
+  }).join('') || `<p class="muted text-sm p-4">Keine Benutzer vorhanden.</p>`;
+}
+
+async function loadAdminUsers() {
+  if (!currentPermissions.can_manage_users) return;
+  $('adminFeedback').textContent = t('adminLoading');
+  try {
+    const data = await apiRequest('/api/admin/users');
+    adminUsers = data.users || [];
+    $('adminFeedback').textContent = currentIsSuperAdmin ? '' : t('adminOnlyPermissions');
+    renderAdminUsers();
+  } catch (error) {
+    $('adminFeedback').textContent = error.message;
+  }
+}
+
+$('adminReload').addEventListener('click', loadAdminUsers);
+$('adminUsers').addEventListener('click', async event => {
+  const row = event.target.closest('[data-user-id]');
+  if (!row) return;
+  const userId = row.dataset.userId;
+  const statusButton = event.target.closest('button[data-status]');
+  const permissionsButton = event.target.closest('button[data-save-permissions]');
+
+  try {
+    if (statusButton) {
+      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+        method: 'PATCH', body: JSON.stringify({ status: statusButton.dataset.status })
+      });
+    } else if (permissionsButton) {
+      const permissions = {};
+      row.querySelectorAll('[data-permission]').forEach(input => { permissions[input.dataset.permission] = input.checked; });
+      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
+        method: 'PATCH', body: JSON.stringify({ permissions })
+      });
+    } else {
+      return;
+    }
+    $('adminFeedback').textContent = t('adminSaved');
+    await loadAdminUsers();
+  } catch (error) {
+    $('adminFeedback').textContent = error.message;
+  }
+});
 
 /* ---------- Map controls and cross-highlighting ---------- */
 $('filters').addEventListener('click', e => {
@@ -650,7 +838,7 @@ function applyLang() {
   $('lang').dataset.lang = lang;
   document.querySelectorAll('#lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   $('fErr').textContent = '';
-  renderPlayers(); renderFinance(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
+  renderPlayers(); renderFinance(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks(); renderAdminUsers();
 }
 $('lang').addEventListener('click', e => {
   const b = e.target.closest('button[data-lang]'); if (!b || b.dataset.lang === lang) return;
@@ -690,6 +878,9 @@ applyLang();
   }
 
   function unlock(user) {
+    currentAuthUserId = user.id;
+    currentPermissions = { ...currentPermissions, ...(user.permissions || {}) };
+    currentIsSuperAdmin = Boolean(user.is_super_admin);
     authUsername.textContent = user.username || 'Discord-Nutzer';
     if (user.avatar) {
       authAvatar.src = user.avatar;
@@ -699,8 +890,13 @@ applyLang();
     }
     authUser.classList.remove('hidden');
     authUser.classList.add('flex');
+    document.getElementById('adminPanel').hidden = !currentPermissions.can_manage_users;
+    document.getElementById('adminNav').hidden = !currentPermissions.can_manage_users;
+    applyTaskPermissions();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;
+    loadTasks();
+    if (currentPermissions.can_manage_users) loadAdminUsers();
   }
 
   async function checkAuth() {
@@ -714,8 +910,8 @@ applyLang();
         return;
       }
 
-      if (data.user.status === 'blocked') {
-        showGate('Dein Zugriff auf dieses Dashboard wurde gesperrt.', { showLogout: true });
+      if (data.user.status === 'blocked' || data.user.status === 'rejected') {
+        showGate(data.user.status === 'blocked' ? 'Dein Zugriff auf dieses Dashboard wurde gesperrt.' : 'Dein Zugang wurde abgelehnt.', { showLogout: true });
         return;
       }
 

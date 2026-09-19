@@ -101,6 +101,22 @@ Am einfachsten ist GitHub + Render:
 8. Ein freigegebener Nutzer sieht oben Avatar, Discord-Name und `● Online`.
 9. Ein blockierter Nutzer wird bei der nächsten Statusabfrage wieder gesperrt.
 
+## Admin-Dashboard und Berechtigungen
+
+Der Hauptadmin wird ausschließlich über `ADMIN_DISCORD_ID=1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint in der Navigation der Bereich **Admin**.
+
+Dort kann der Hauptadmin:
+
+- alle Nutzer sehen,
+- wartende Nutzer annehmen oder ablehnen,
+- bereits freigeschaltete Nutzer sperren,
+- Nutzer wieder auf `wartend` setzen,
+- die Rechte `Aufgaben erstellen`, `Aufgaben löschen` und `Nutzer verwalten` einzeln vergeben.
+
+Nutzer mit `Nutzer verwalten` dürfen das Admin-Dashboard öffnen und Zugangsstatus ändern. Nur der feste Hauptadmin darf Berechtigungen weitergeben oder entziehen. Aufgaben werden serverseitig in Supabase gespeichert, damit diese Rechte nicht im Browser umgangen werden können.
+
+Nach diesem Update muss `supabase/schema.sql` erneut vollständig im Supabase SQL Editor ausgeführt werden. Das Skript aktualisiert bestehende Installationen idempotent und legt die neue `tasks`-Tabelle sowie die Berechtigungsspalten an.
+
 ## Sicherheitsdetails
 
 - `DISCORD_CLIENT_SECRET` bleibt auf dem Server.
