@@ -1,0 +1,19 @@
+{
+  "name": "fs25-companion-discord-auth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FS25 Companion dashboard with Discord OAuth2 and Supabase approval workflow",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0"
+  }
+}
