@@ -41,18 +41,81 @@ try {
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production' || discordRedirectUri.startsWith('https://');
+const ADMIN_DISCORD_ID = '1124793204588433518';
+if (String(process.env.ADMIN_DISCORD_ID).trim() !== ADMIN_DISCORD_ID) {
+    console.warn(`[config] ADMIN_DISCORD_ID wird ignoriert; der feste Hauptadmin ist ${ADMIN_DISCORD_ID}.`);
+}
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
 });
+
+class SupabaseSessionStore extends session.Store {
+    constructor(client) {
+        super();
+        this.client = client;
+        this.fallback = new session.MemoryStore();
+        this.warned = false;
+    }
+
+    warn(error) {
+        if (this.warned) return;
+        this.warned = true;
+        console.warn('[session-store] Supabase-Sitzungen nicht verfügbar, temporärer Speicher wird verwendet:', error?.message);
+    }
+
+    get(sid, callback) {
+        this.client.from('website_sessions').select('sess').eq('id', sid).gt('expires_at', new Date().toISOString()).maybeSingle()
+            .then(({ data, error }) => {
+                if (error) {
+                    this.warn(error);
+                    return this.fallback.get(sid, callback);
+                }
+                callback(null, data?.sess || null);
+            }).catch((error) => {
+                this.warn(error);
+                this.fallback.get(sid, callback);
+            });
+    }
+
+    set(sid, value, callback = () => {}) {
+        const expiresAt = value.cookie?.expires
+            ? new Date(value.cookie.expires).toISOString()
+            : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        this.fallback.set(sid, value, () => {});
+        this.client.from('website_sessions').upsert({ id: sid, sess: value, expires_at: expiresAt, updated_at: new Date().toISOString() })
+            .then(({ error }) => {
+                if (error) this.warn(error);
+                callback(null);
+            }).catch((error) => {
+                this.warn(error);
+                callback(null);
+            });
+    }
+
+    destroy(sid, callback = () => {}) {
+        this.fallback.destroy(sid, () => {});
+        this.client.from('website_sessions').delete().eq('id', sid)
+            .then(({ error }) => callback(error || null))
+            .catch((error) => callback(error));
+    }
+
+    touch(sid, value, callback = () => {}) {
+        this.set(sid, value, callback);
+    }
+}
+
+const sessionStore = new SupabaseSessionStore(supabase);
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(express.json());
 app.use(session({
     name: 'fs25.sid',
+    store: sessionStore,
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
         httpOnly: true,
         secure: isProduction,
@@ -72,14 +135,14 @@ function avatarUrl(discordUser) {
 }
 
 function sessionUser(databaseUser) {
-    const isSuperAdmin = databaseUser.discord_id === process.env.ADMIN_DISCORD_ID;
+    const isSuperAdmin = String(databaseUser.discord_id) === ADMIN_DISCORD_ID;
     const schemaReady = Object.prototype.hasOwnProperty.call(databaseUser, 'can_manage_users');
     return {
         id: databaseUser.discord_id,
         username: databaseUser.global_name || databaseUser.username,
         avatar: databaseUser.avatar_url,
-        status: databaseUser.status,
-        is_approved: databaseUser.status === 'approved',
+        status: isSuperAdmin ? 'approved' : databaseUser.status,
+        is_approved: isSuperAdmin || databaseUser.status === 'approved',
         is_admin: isSuperAdmin || databaseUser.is_admin,
         is_super_admin: isSuperAdmin,
         schema_ready: schemaReady,
@@ -123,6 +186,14 @@ function requireApprovedPermission(permission) {
             res.status(503).json({ error: 'Berechtigungen konnten nicht geprüft werden.' });
         }
     };
+}
+
+const realtimeClients = new Set();
+function broadcast(event, data = {}) {
+    const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of realtimeClients) {
+        try { client.write(message); } catch { realtimeClients.delete(client); }
+    }
 }
 
 function redirectWithError(res, error) {
@@ -185,7 +256,7 @@ app.get('/api/auth/callback', async (req, res) => {
         });
 
         const discordUser = userResponse.data;
-        const isAdmin = discordUser.id === process.env.ADMIN_DISCORD_ID;
+        const isAdmin = discordUser.id === ADMIN_DISCORD_ID;
 
         const { data: existingUser, error: selectError } = await supabase
             .from('discord_users')
@@ -282,6 +353,24 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
+app.get('/api/events', requireApprovedPermission(), (req, res) => {
+    res.set({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    res.write(`event: connected\ndata: {"ok":true}\n\n`);
+    realtimeClients.add(res);
+
+    const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25000);
+    req.on('close', () => {
+        clearInterval(keepAlive);
+        realtimeClients.delete(res);
+    });
+});
+
 app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async (req, res) => {
     const { data: users, error } = await supabase
         .from('discord_users')
@@ -294,7 +383,7 @@ app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async
             ...user,
             display_name: user.global_name || user.username,
             avatar: avatarUrlFromRecord(user),
-            is_super_admin: user.discord_id === process.env.ADMIN_DISCORD_ID,
+            is_super_admin: user.discord_id === ADMIN_DISCORD_ID,
         })),
     });
 });
@@ -306,7 +395,7 @@ app.patch('/api/admin/users/:discordId/status', requireApprovedPermission('can_m
     if (!['pending', 'approved', 'rejected', 'blocked'].includes(status)) {
         return res.status(400).json({ error: 'Ungültiger Benutzerstatus.' });
     }
-    if (targetDiscordId === process.env.ADMIN_DISCORD_ID) {
+    if (targetDiscordId === ADMIN_DISCORD_ID) {
         return res.status(400).json({ error: 'Der Hauptadmin kann nicht gesperrt oder abgelehnt werden.' });
     }
     if (targetDiscordId === req.session.user.id) {
@@ -321,6 +410,7 @@ app.patch('/api/admin/users/:discordId/status', requireApprovedPermission('can_m
         .single();
 
     if (error) return res.status(500).json({ error: 'Benutzerstatus konnte nicht gespeichert werden.' });
+    broadcast('users-changed', { userId: targetDiscordId });
     res.json({ user });
 });
 
@@ -331,7 +421,7 @@ app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('
 
     const targetDiscordId = String(req.params.discordId || '');
     if (!/^\d{17,20}$/.test(targetDiscordId)) return res.status(400).json({ error: 'Ungültige Discord-ID.' });
-    if (targetDiscordId === process.env.ADMIN_DISCORD_ID) {
+    if (targetDiscordId === ADMIN_DISCORD_ID) {
         return res.status(400).json({ error: 'Die Rechte des Hauptadmins sind fest vergeben.' });
     }
 
@@ -350,6 +440,7 @@ app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('
         .single();
 
     if (error) return res.status(500).json({ error: 'Berechtigungen konnten nicht gespeichert werden.' });
+    broadcast('users-changed', { userId: targetDiscordId });
     res.json({ user });
 });
 
@@ -390,6 +481,7 @@ app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req
     }).select('*').single();
 
     if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht erstellt werden.' });
+    broadcast('tasks-changed', { action: 'created', taskId: task.id });
     res.status(201).json({ task });
 });
 
@@ -406,12 +498,14 @@ app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
         .select('*')
         .single();
     if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht aktualisiert werden.' });
+    broadcast('tasks-changed', { action: 'updated', taskId: task.id });
     res.json({ task });
 });
 
 app.delete('/api/tasks/completed', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
     const { error } = await supabase.from('tasks').delete().eq('is_completed', true);
     if (error) return res.status(500).json({ error: 'Erledigte Aufgaben konnten nicht gelöscht werden.' });
+    broadcast('tasks-changed', { action: 'completed-cleared' });
     res.json({ success: true });
 });
 
@@ -420,6 +514,7 @@ app.delete('/api/tasks/:id', requireApprovedPermission('can_delete_tasks'), asyn
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht gelöscht werden.' });
+    broadcast('tasks-changed', { action: 'deleted', taskId: id });
     res.json({ success: true });
 });
 
@@ -431,6 +526,7 @@ app.post('/api/presence', requireApprovedPermission(), async (req, res) => {
         .eq('discord_id', req.session.user.id);
 
     if (error) return res.status(500).json({ error: 'Online-Status konnte nicht aktualisiert werden.' });
+    broadcast('presence-changed', { userId: req.session.user.id });
     res.json({ success: true, last_seen_at: now });
 });
 
@@ -503,6 +599,7 @@ app.get('/api/public-config', (req, res) => {
 app.get('/api/auth/logout', async (req, res) => {
     if (req.session.user?.id) {
         await supabase.from('discord_users').update({ last_seen_at: null }).eq('discord_id', req.session.user.id);
+        broadcast('presence-changed', { userId: req.session.user.id });
     }
     req.session.destroy(() => {
         res.clearCookie('fs25.sid');

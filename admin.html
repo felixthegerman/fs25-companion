@@ -115,6 +115,7 @@
     let currentUser = null;
     let users = [];
     let presenceTimer = null;
+    let eventStream = null;
 
     const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     async function api(url, options = {}) {
@@ -158,6 +159,11 @@
       updatePresence();
       presenceTimer=window.setInterval(updatePresence,30000);
     }
+    function startRealtime() {
+      if(eventStream)return;
+      eventStream=new EventSource('/api/events');
+      eventStream.addEventListener('users-changed',loadUsers);
+    }
     document.getElementById('users').addEventListener('click', async event => {
       const row=event.target.closest('[data-user-id]'); if(!row)return;
       const statusButton=event.target.closest('[data-status]'); const saveButton=event.target.closest('[data-save]'); if(!statusButton&&!saveButton)return;
@@ -178,6 +184,7 @@
         document.getElementById('username').textContent=currentUser.username;
         document.getElementById('avatar').src=currentUser.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
         startPresence();
+        startRealtime();
         if(currentUser.schema_ready===false){setFeedback('Führe zuerst supabase/schema.sql im Supabase SQL Editor aus.',true);return;}
         await loadUsers();
       } catch(error){window.location.replace('/');}

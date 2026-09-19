@@ -9,6 +9,8 @@ Dieses Projekt setzt dein vorhandenes `index.html` um und ergänzt:
 - echte Online-Anzeige aller freigeschalteten Website-Nutzer mit Discord-Avatar
 - verstecktes Admin-Panel nur für den Admin
 - eigener Finanzbereich für alle freigeschalteten Nutzer
+- Live-Synchronisierung von Aufgaben und Benutzeränderungen ohne Neuladen
+- persistente, sieben Tage gültige Website-Sitzungen in Supabase
 - Supabase als persistente Datenbank
 - eine gemeinsame Express-App für Frontend und Backend, damit Sessions same-origin bleiben
 
@@ -104,7 +106,9 @@ Am einfachsten ist GitHub + Render:
 
 ## Admin-Dashboard und Berechtigungen
 
-Der Hauptadmin wird ausschließlich über `ADMIN_DISCORD_ID=1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint nur für berechtigte Nutzer in der Navigation der eigene Bereich **Admin** unter `/admin`. Die Seite wird zusätzlich serverseitig geschützt und kann ohne `Nutzer verwalten` auch nicht direkt über die URL geöffnet werden.
+Der Hauptadmin wird über die feste Discord-ID `1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint nur für berechtigte Nutzer in der Navigation der eigene Bereich **Admin** unter `/admin`. Die Seite wird zusätzlich serverseitig geschützt und kann ohne `Nutzer verwalten` auch nicht direkt über die URL geöffnet werden.
+
+Die Discord-ID `1124793204588433518` ist zusätzlich fest im Backend abgesichert. Für diesen Nutzer gelten `approved`, `Aufgaben erstellen`, `Aufgaben löschen` und `Nutzer verwalten` daher immer – unabhängig von alten oder fehlerhaften Berechtigungswerten in der Datenbank.
 
 Dort kann der Hauptadmin:
 
@@ -123,6 +127,8 @@ Der Bereich **Finanzen** ist unter `/finances` für jeden freigeschalteten Nutze
 Solange noch keine FS25-Telemetrie angeschlossen ist, bleiben alle Finanzwerte und Listen bewusst leer. Auch Felder, Maschinen, Erntefortschritt und Arbeitsaufträge aus dem Spiel werden nicht mit Platzhalterdaten befüllt. Manuell angelegte Website-Aufgaben bleiben davon unberührt und werden weiterhin in Supabase gespeichert.
 
 Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im Supabase SQL Editor aus. Das Skript ist wiederholbar, aktualisiert auch ältere Tabellenstrukturen und legt fehlende Tabellen oder Spalten an. Echte Nutzer und Aufgaben bleiben erhalten; ausschließlich die früher fest eingebauten Demo-Aufgaben ohne Ersteller werden entfernt.
+
+Das SQL-Skript legt außerdem `website_sessions` an. Dadurch bleibt die Discord-Anmeldung bei einem Seiten-Refresh sowie nach einem Server-Neustart oder neuen Deployment bestehen. Die Sitzung läuft nach sieben Tagen ab oder wird durch **Abmelden** sofort gelöscht.
 
 ## Sicherheitsdetails
 

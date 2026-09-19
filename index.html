@@ -718,6 +718,8 @@ applyLang();
   const authAvatar = document.getElementById('authAvatar');
   const authUsername = document.getElementById('authUsername');
   let presenceTimer = null;
+  let taskSyncTimer = null;
+  let eventStream = null;
 
   const errors = {
     auth_failed: 'Die Discord-Anmeldung ist fehlgeschlagen. Bitte versuche es erneut.',
@@ -753,15 +755,24 @@ applyLang();
     gate.hidden = true;
     loadTasks();
     startPresence();
+    startRealtime();
+  }
+
+  async function loadOnlineUsers() {
+    try {
+      const data = await apiRequest('/api/online-users');
+      players = data.users || [];
+      renderPlayers();
+      renderForm();
+    } catch (error) {
+      console.warn('Online-Nutzer konnten nicht geladen werden:', error.message);
+    }
   }
 
   async function refreshPresence() {
     try {
       await apiRequest('/api/presence', { method: 'POST' });
-      const data = await apiRequest('/api/online-users');
-      players = data.users || [];
-      renderPlayers();
-      renderForm();
+      await loadOnlineUsers();
     } catch (error) {
       console.warn('Online-Status konnte nicht aktualisiert werden:', error.message);
     }
@@ -771,6 +782,15 @@ applyLang();
     if (presenceTimer) return;
     refreshPresence();
     presenceTimer = window.setInterval(refreshPresence, 30000);
+  }
+
+  function startRealtime() {
+    if (eventStream) return;
+    eventStream = new EventSource('/api/events');
+    eventStream.addEventListener('tasks-changed', () => loadTasks());
+    eventStream.addEventListener('presence-changed', () => loadOnlineUsers());
+    eventStream.onerror = () => console.warn('Live-Verbindung wird automatisch neu aufgebaut.');
+    taskSyncTimer = window.setInterval(loadTasks, 15000);
   }
 
   async function checkAuth() {

@@ -44,9 +44,39 @@ alter table public.discord_users drop constraint if exists discord_users_status_
 alter table public.discord_users add constraint discord_users_status_check
   check (status in ('pending', 'approved', 'rejected', 'blocked'));
 
+-- The primary website administrator always has every permission. The backend
+-- enforces the same fixed Discord ID independently of these stored flags.
+update public.discord_users
+set status = 'approved',
+    is_admin = true,
+    can_create_tasks = true,
+    can_delete_tasks = true,
+    can_manage_users = true,
+    updated_at = now()
+where discord_id = '1124793204588433518';
+
 create index if not exists discord_users_status_idx on public.discord_users(status);
 create index if not exists discord_users_created_idx on public.discord_users(created_at);
 create index if not exists discord_users_presence_idx on public.discord_users(last_seen_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Persistent website sessions. Keeps Discord logins across page refreshes and
+-- server restarts/deployments. Session contents are only read by the backend.
+-- ---------------------------------------------------------------------------
+create table if not exists public.website_sessions (
+  id text primary key,
+  sess jsonb not null,
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.website_sessions add column if not exists sess jsonb;
+alter table public.website_sessions add column if not exists expires_at timestamptz;
+alter table public.website_sessions add column if not exists updated_at timestamptz not null default now();
+delete from public.website_sessions where sess is null or expires_at is null;
+alter table public.website_sessions alter column sess set not null;
+alter table public.website_sessions alter column expires_at set not null;
+create index if not exists website_sessions_expires_idx on public.website_sessions(expires_at);
 
 -- ---------------------------------------------------------------------------
 -- Shared task board
@@ -183,9 +213,11 @@ create index if not exists finance_transactions_occurred_idx
 -- Browser clients do not access these tables directly. The Express backend
 -- uses the Supabase server-side secret key and therefore bypasses RLS.
 alter table public.discord_users enable row level security;
+alter table public.website_sessions enable row level security;
 alter table public.tasks enable row level security;
 alter table public.finance_transactions enable row level security;
 revoke all on table public.discord_users from anon, authenticated;
+revoke all on table public.website_sessions from anon, authenticated;
 revoke all on table public.tasks from anon, authenticated;
 revoke all on table public.finance_transactions from anon, authenticated;
 
