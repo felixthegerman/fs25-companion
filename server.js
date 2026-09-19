@@ -5,17 +5,30 @@ const axios = require('axios');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
+// VERIFIKATION DER VARIABLEN (Verhindert Absturz und zeigt genauen Fehler im Log)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+    console.error("❌ CRITICAL ERROR: Supabase-Schlüssel wurden von Render nicht geladen!");
+    console.error("Bitte überprüfe deine Umgebungsvariablen im Render-Dashboard auf Rechtschreibung:");
+    console.error("SUPABASE_URL =", supabaseUrl ? "✅ Geladen" : "❌ FEHLT ODER LEER");
+    console.error("SUPABASE_SERVICE_ROLE_KEY =", supabaseKey ? "✅ Geladen" : "❌ FEHLT ODER LEER");
+    process.exit(1); 
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Supabase Client mit den verifizierten Variablen erstellen
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 app.use(session({
     secret: 'fs25-tracker-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false } // Auf true setzen, falls du später HTTPS (Production) nutzt
+    cookie: { secure: false } // Auf true setzen, falls du später HTTPS nutzt
 }));
 
 // API: Discord Login-Weiterleitung
@@ -107,4 +120,4 @@ app.get('/api/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-app.listen(process.env.PORT, () => console.log(`Server läuft auf Port ${process.env.PORT}`));
+app.listen(process.env.PORT || 10000, () => console.log(`Server läuft auf Port ${process.env.PORT || 10000}`));
