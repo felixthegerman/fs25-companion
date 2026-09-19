@@ -1,96 +1,187 @@
-<!-- Setze dies in den <head> deiner index.html falls noch nicht vorhanden -->
-<script src="https://jsdelivr.net"></script>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hollow Creek Farm - FS25 Dashboard</title>
+    <script src="https://tailwindcss.com"></script>
+    <!-- HIER WAR DER FEHLER: Der korrekte, vollständige Supabase-Link -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { background-color: #1A1917; color: #F3F4F6; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .bg-farm-green { background-color: #2A4523; }
+        .blur-bg { filter: blur(12px); pointer-events: none; }
+    </style>
+</head>
+<body class="min-h-screen relative p-4">
 
-<!-- Das angepasste Script ganz unten vor </body> -->
-<script>
-    const SUPABASE_URL = "DEINE_SUPABASE_URL";
-    const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    <!-- 1. DISCORD LOGIN OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 transition-all duration-300">
+        <div class="bg-[#242320] border border-stone-700 p-8 rounded-xl shadow-2xl max-w-md w-full text-center space-y-6">
+            <h2 class="text-2xl font-black text-amber-500 tracking-wider">HOLLOW CREEK FARM</h2>
+            <p class="text-sm text-stone-300">Melde dich mit deinem Discord-Konto an, um auf das Live-Dashboard des Servers zuzugreifen.</p>
+            <a href="/api/auth/login" class="inline-block w-full py-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold rounded-lg transition shadow-lg text-center tracking-wide">
+                Mit Discord anmelden
+            </a>
+        </div>
+    </div>
 
-    let currentUser = null;
+    <!-- 2. WARTESCHLEIFEN OVERLAY -->
+    <div id="waitingOverlay" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 p-4">
+        <div class="bg-[#242320] border border-stone-700 p-8 rounded-xl shadow-2xl max-w-md w-full text-center space-y-4">
+            <h2 class="text-xl font-bold text-amber-500">Warte auf Freischaltung</h2>
+            <p class="text-sm text-stone-300">Du hast dich erfolgreich angemeldet. Der Website-Besitzer muss deinen Zugriff erst erlauben, bevor du das Dashboard sehen kannst.</p>
+            <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-amber-500 border-r-transparent align-[-0.125em]"></div>
+        </div>
+    </div>
 
-    async function checkAuth() {
-        const res = await fetch('/api/auth/me');
-        const data = await res.json();
+    <!-- 3. MAIN DASHBOARD CONTENT -->
+    <div id="dashboardContent" class="blur-bg max-w-7xl mx-auto space-y-6 transition-all duration-500">
         
-        const loginOverlay = document.getElementById('loginOverlay'); // Deine ID des Login-Elements
-        const dashboard = document.getElementById('dashboardContent');
-        const waitingOverlay = document.getElementById('waitingOverlay'); // Warteschleifen-Kasten falls nicht freigeschaltet
+        <!-- HEADER -->
+        <header class="flex flex-col sm:flex-row justify-between items-center bg-[#242320] border border-stone-800 p-4 rounded-xl gap-4">
+            <div class="flex items-center gap-3">
+                <div class="text-2xl font-black text-amber-500 tracking-wider">FS25 COMPANION</div>
+                <span id="userStatus" class="hidden items-center gap-2 bg-stone-800 px-3 py-1 rounded-full text-xs font-semibold text-green-400">
+                    <span class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span id="activeUser">Spieler</span>
+                </span>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="/api/auth/logout" class="text-xs text-stone-400 hover:text-white transition">Abmelden</a>
+            </div>
+        </header>
 
-        if (!data.loggedIn) {
-            // Zeige Login-Kasten mit "Mit Discord anmelden" Button
-            loginOverlay.classList.remove('hidden');
-            dashboard.classList.add('blur-bg');
-            return;
-        }
+        <!-- KONTOSTAND & FINANZEN -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-[#242320] border border-stone-800 p-6 rounded-xl">
+                <h3 class="text-sm font-semibold text-stone-400 uppercase tracking-wider mb-2">Kontostand</h3>
+                <p id="farmMoney" class="text-3xl font-black text-white">0 €</p>
+            </div>
+            <div class="bg-[#242320] border border-stone-800 p-6 rounded-xl">
+                <h3 class="text-sm font-semibold text-stone-400 uppercase tracking-wider mb-2">Einnahmen</h3>
+                <p class="text-3xl font-black text-green-500">+0 €</p>
+            </div>
+            <div class="bg-[#242320] border border-stone-800 p-6 rounded-xl">
+                <h3 class="text-sm font-semibold text-stone-400 uppercase tracking-wider mb-2">Wartungskosten</h3>
+                <p class="text-3xl font-black text-red-500">-0 €</p>
+            </div>
+        </section>
 
-        currentUser = data.user;
-
-        if (!currentUser.is_approved) {
-            // Spieler eingeloggt, aber noch nicht vom Admin bestätigt
-            loginOverlay.classList.add('hidden');
-            waitingOverlay.classList.remove('hidden');
-            dashboard.classList.add('blur-bg');
-            return;
-        }
-
-        // Erfolgreich eingeloggt und freigeschaltet
-        loginOverlay.classList.add('hidden');
-        if(waitingOverlay) waitingOverlay.classList.add('hidden');
-        dashboard.classList.remove('blur-bg');
-
-        // Username und Avatar oben rechts rendern
-        document.getElementById('activeUser').innerText = currentUser.username;
-        if(currentUser.is_admin) {
-            // Zeige Admin-Panel falls erwünscht
-            loadPendingUsers();
-        }
-
-        initRealtime();
-        loadFieldsFromDatabase();
-    }
-
-    function initRealtime() {
-        supabase.channel('public:fields').on('postgres_changes', { event: '*', schema: 'public', table: 'fields' }, () => {
-            loadFieldsFromDatabase();
-        }).subscribe();
-        
-        supabase.channel('public:farm_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'farm_stats' }, payload => {
-            document.querySelector('.text-3xl.font-black.text-white').innerText = payload.new.money.toLocaleString('de-DE') + " \$";
-        }).subscribe();
-    }
-
-    async function loadFieldsFromDatabase() {
-        const { data: fields } = await supabase.from('fields').select('*').order('field_number', { ascending: true });
-        const grid = document.getElementById('fieldsGrid');
-        if (!grid || !fields) return;
-        grid.innerHTML = '';
-
-        fields.forEach(field => {
-            const isUnowned = !field.is_owned;
-            const cardHtml = `
-                <div class="${isUnowned ? 'unowned-card bg-stone-900/45 border-stone-800' : 'bg-farm-green border-emerald-700'} p-4 rounded-xl border relative overflow-hidden flex flex-col justify-between h-32">
-                    <div class="flex justify-between items-start">
-                        <span class="text-2xl font-black ${isUnowned ? 'text-stone-500' : ''}">${field.field_number}</span>
-                        <img src="assets/icons/${field.crop_type.toLowerCase()}.png" class="w-6 h-6 object-contain" onerror="this.outerHTML='🌾'">
-                    </div>
-                    <div>
-                        <p class="text-sm font-bold truncate">${field.crop_type}</p>
-                        <p class="text-xs font-medium tracking-wide">
-                            ${isUnowned ? '💰 ' + field.price.toLocaleString('de-DE') + ' $' : '🌱 ' + field.growth_stage + ' (' + field.growth_percentage + '%)'}
-                        </p>
-                    </div>
+        <!-- MAP & CHECKLISTE -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- FELDKARTE -->
+            <section class="lg:col-span-2 bg-[#242320] border border-stone-800 p-6 rounded-xl space-y-4">
+                <h2 class="text-xl font-bold text-white">Feldkarte & Übersicht</h2>
+                <div id="fieldsGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <!-- Wird dynamisch aus Supabase befüllt -->
                 </div>
-            `;
-            grid.insertAdjacentHTML('beforeend', cardHtml);
-        });
-    }
+            </section>
 
-    // Admin-Funktion: Zeige unbestätigte User an
-    async function loadPendingUsers() {
-        const { data: users } = await supabase.from('users').select('*').eq('is_approved', false);
-        // Hier kannst du eine kleine Admin-Liste in der UI befüllen, um Spieler freizuschalten!
-    }
+            <!-- TASKBOARD -->
+            <section class="bg-[#242320] border border-stone-800 p-6 rounded-xl space-y-4">
+                <h2 class="text-xl font-bold text-white">Aufgaben Board</h2>
+                <div id="taskList" class="space-y-2 max-h-60 overflow-y-auto">
+                    <!-- Wird dynamisch befüllt -->
+                </div>
+            </section>
+        </div>
 
-    window.onload = checkAuth;
-</script>
+    </div>
+
+    <!-- JAVASCRIPT-LOGIK -->
+    <script>
+        // TRAGE HIER DEINE ECHTEN ZUGANGSDATEN EIN!
+        const SUPABASE_URL = "DEINE_SUPABASE_URL";
+        const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let currentUser = null;
+
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/auth/me');
+                const data = await res.json();
+                
+                const loginOverlay = document.getElementById('loginOverlay');
+                const dashboard = document.getElementById('dashboardContent');
+                const waitingOverlay = document.getElementById('waitingOverlay');
+
+                if (!data.loggedIn) {
+                    loginOverlay.classList.remove('hidden');
+                    dashboard.classList.add('blur-bg');
+                    return;
+                }
+
+                currentUser = data.user;
+
+                if (!currentUser.is_approved) {
+                    loginOverlay.classList.add('hidden');
+                    waitingOverlay.classList.remove('hidden');
+                    dashboard.classList.add('blur-bg');
+                    return;
+                }
+
+                loginOverlay.classList.add('hidden');
+                waitingOverlay.classList.add('hidden');
+                dashboard.classList.remove('blur-bg');
+
+                document.getElementById('activeUser').innerText = currentUser.username;
+                document.getElementById('userStatus').classList.remove('hidden');
+                document.getElementById('userStatus').classList.add('inline-flex');
+
+                initRealtime();
+                loadFieldsFromDatabase();
+            } catch (err) {
+                console.error("Auth-Check fehlgeschlagen:", err);
+            }
+        }
+
+        function initRealtime() {
+            supabaseClient.channel('public:fields').on('postgres_changes', { event: '*', schema: 'public', table: 'fields' }, () => {
+                loadFieldsFromDatabase();
+            }).subscribe();
+            
+            supabaseClient.channel('public:farm_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'farm_stats' }, payload => {
+                if (payload.new) {
+                    document.getElementById('farmMoney').innerText = payload.new.money.toLocaleString('de-DE') + " €";
+                }
+            }).subscribe();
+        }
+
+        async function loadFieldsFromDatabase() {
+            const { data: fields } = await supabaseClient.from('fields').select('*').order('field_number', { ascending: true });
+            const grid = document.getElementById('fieldsGrid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            if (!fields || fields.length === 0) {
+                grid.innerHTML = '<p class="text-stone-500 text-sm p-4 col-span-full text-center">Warte auf Live-Daten...</p>';
+                return;
+            }
+
+            fields.forEach(field => {
+                const isUnowned = !field.is_owned;
+                const cardHtml = `
+                    <div class="${isUnowned ? 'bg-stone-900/45 border-stone-800 opacity-50' : 'bg-farm-green border-emerald-700'} p-4 rounded-xl border relative overflow-hidden flex flex-col justify-between h-32">
+                        <div class="flex justify-between items-start">
+                            <span class="text-2xl font-black">${field.field_number}</span>
+                            <img src="assets/icons/${field.crop_type.toLowerCase()}.png" class="w-6 h-6 object-contain" onerror="this.outerHTML='🌾'">
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold truncate">${field.crop_type}</p>
+                            <p class="text-xs font-medium tracking-wide">
+                                ${isUnowned ? '💰 ' + field.price.toLocaleString('de-DE') + ' $' : '🌱 ' + field.growth_stage}
+                            </p>
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        window.onload = checkAuth;
+    </script>
+</body>
+</html>
