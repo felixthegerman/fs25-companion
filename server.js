@@ -73,6 +73,7 @@ function avatarUrl(discordUser) {
 
 function sessionUser(databaseUser) {
     const isSuperAdmin = databaseUser.discord_id === process.env.ADMIN_DISCORD_ID;
+    const schemaReady = Object.prototype.hasOwnProperty.call(databaseUser, 'can_manage_users');
     return {
         id: databaseUser.discord_id,
         username: databaseUser.global_name || databaseUser.username,
@@ -81,6 +82,7 @@ function sessionUser(databaseUser) {
         is_approved: databaseUser.status === 'approved',
         is_admin: isSuperAdmin || databaseUser.is_admin,
         is_super_admin: isSuperAdmin,
+        schema_ready: schemaReady,
         permissions: {
             can_create_tasks: isSuperAdmin || Boolean(databaseUser.can_create_tasks),
             can_delete_tasks: isSuperAdmin || Boolean(databaseUser.can_delete_tasks),
@@ -206,11 +208,33 @@ app.get('/api/auth/callback', async (req, res) => {
             updated_at: new Date().toISOString(),
         };
 
-        const { data: savedUser, error: upsertError } = await supabase
+        let { data: savedUser, error: upsertError } = await supabase
             .from('discord_users')
             .upsert(userRecord, { onConflict: 'discord_id' })
             .select('*')
             .single();
+
+        // Keep the Discord login operational while an older installation is
+        // waiting for the admin-permissions migration to be applied.
+        if (upsertError?.code === '42703' || upsertError?.code === 'PGRST204') {
+            const legacyRecord = {
+                discord_id: userRecord.discord_id,
+                username: userRecord.username,
+                global_name: userRecord.global_name,
+                avatar_hash: userRecord.avatar_hash,
+                status: userRecord.status,
+                is_admin: userRecord.is_admin,
+                updated_at: userRecord.updated_at,
+            };
+            const legacyResult = await supabase
+                .from('discord_users')
+                .upsert(legacyRecord, { onConflict: 'discord_id' })
+                .select('*')
+                .single();
+            savedUser = legacyResult.data;
+            upsertError = legacyResult.error;
+            console.warn('[auth/callback] Admin-Migration fehlt; Legacy-Login wird verwendet.');
+        }
 
         if (upsertError) throw upsertError;
 
@@ -334,11 +358,11 @@ app.get('/api/tasks', requireApprovedPermission(), async (req, res) => {
     res.json({
         tasks: tasks.map((task) => ({
             id: task.id,
-            name: task.name,
+            name: task.task_name,
             field: task.field_number,
-            player: task.assigned_player,
-            urgency: task.urgency,
-            done: task.done,
+            player: task.player_name,
+            urgency: task.priority,
+            done: task.is_completed,
         })),
     });
 });
@@ -356,10 +380,11 @@ app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req
     if (!['low', 'medium', 'high'].includes(urgency)) return res.status(400).json({ error: 'Die Dringlichkeit ist ungültig.' });
 
     const { data: task, error } = await supabase.from('tasks').insert({
-        name,
+        task_name: name,
         field_number: field,
-        assigned_player: player || null,
-        urgency,
+        player_name: player,
+        priority: urgency,
+        is_completed: false,
         created_by: req.session.user.id,
     }).select('*').single();
 
@@ -375,7 +400,7 @@ app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
 
     const { data: task, error } = await supabase
         .from('tasks')
-        .update({ done: req.body.done, updated_at: new Date().toISOString() })
+        .update({ is_completed: req.body.done, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select('*')
         .single();
@@ -384,7 +409,7 @@ app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
 });
 
 app.delete('/api/tasks/completed', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
-    const { error } = await supabase.from('tasks').delete().eq('done', true);
+    const { error } = await supabase.from('tasks').delete().eq('is_completed', true);
     if (error) return res.status(500).json({ error: 'Erledigte Aufgaben konnten nicht gelöscht werden.' });
     res.json({ success: true });
 });
@@ -412,6 +437,10 @@ app.get('/api/auth/logout', (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
+app.get('/admin', requireApprovedPermission('can_manage_users'), (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+app.get('/admin.html', (req, res) => res.redirect('/admin'));
 app.use(express.static(path.join(__dirname)));
 
 const port = process.env.PORT || 10000;

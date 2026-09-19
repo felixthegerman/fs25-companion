@@ -176,7 +176,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
       <a class="lnk" href="#map" data-i18n="navMap"></a>
       <a class="lnk" href="#machines" data-i18n="navMachines"></a>
       <a class="lnk" href="#tasks" data-i18n="navTasks"></a>
-      <a id="adminNav" class="lnk" href="#adminPanel" data-i18n="navAdmin" hidden></a>
+      <a id="adminNav" class="lnk" href="/admin" data-i18n="navAdmin" hidden></a>
     </nav>
     <div class="ml-auto flex items-center gap-3">
       <div id="players" class="hidden sm:flex -space-x-2"></div>
@@ -214,26 +214,6 @@ tailwind.config = { theme: { extend: { fontFamily: {
     <div class="col-span-2 lg:col-span-1">
       <p class="muted text-xs mb-1" data-i18n="chartCap"></p>
       <div id="chart" class="flex items-end gap-2 h-14" role="img" data-i18n-aria="chartAria"></div>
-    </div>
-  </section>
-
-  <!-- Admin dashboard -->
-  <section id="adminPanel" class="panel p-4 sm:p-5 mb-5" aria-labelledby="admin-h" hidden>
-    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-      <div>
-        <h2 id="admin-h" class="h2" data-i18n="adminTitle"></h2>
-        <p class="muted text-sm mt-1" data-i18n="adminSub"></p>
-      </div>
-      <button id="adminReload" type="button" class="btn ghost" data-i18n="adminReload"></button>
-    </div>
-    <p id="adminFeedback" class="muted text-sm mb-3" role="status"></p>
-    <div class="overflow-auto rounded-lg border" style="border-color:var(--line)">
-      <div class="min-w-[900px]">
-        <div class="grid grid-cols-[minmax(220px,1.1fr)_130px_minmax(350px,1.5fr)_minmax(250px,1fr)] gap-4 px-4 py-2 text-xs muted border-b" style="border-color:var(--line)">
-          <span data-i18n="adminUser"></span><span data-i18n="adminStatus"></span><span data-i18n="adminPermissions"></span><span data-i18n="adminActions"></span>
-        </div>
-        <div id="adminUsers"></div>
-      </div>
     </div>
   </section>
 
@@ -357,6 +337,7 @@ const i18n = {
     approveUser: 'Approve', rejectUser: 'Reject', blockUser: 'Block', resetPending: 'Set pending',
     status_pending: 'Pending', status_approved: 'Approved', status_rejected: 'Rejected', status_blocked: 'Blocked', superAdmin: 'Primary admin', ownAccount: 'Own account',
     adminOnlyPermissions: 'Only the primary admin can change permissions.', adminLoading: 'Loading users …', adminSaved: 'Changes saved.',
+    adminMigrationRequired: 'The database migration for user permissions is still missing. Run supabase/schema.sql in the Supabase SQL Editor.',
     p_plow: 'Plow', p_cultivate: 'Cultivate', p_sow: 'Sow', p_fertilize: 'Fertilize', p_harvest: 'Harvest', p_mow: 'Mow', p_bale: 'Bale', p_haul: 'Haul',
     seed1: 'Harvest the wheat', seed2: 'Fertilize the potatoes', seed3: 'Service the Claas Lexion',
     footer: 'Sample data for layout preview. Nothing here is connected to a live save yet.',
@@ -392,6 +373,7 @@ const i18n = {
     approveUser: 'Annehmen', rejectUser: 'Ablehnen', blockUser: 'Sperren', resetPending: 'Auf wartend setzen',
     status_pending: 'Wartend', status_approved: 'Angenommen', status_rejected: 'Abgelehnt', status_blocked: 'Gesperrt', superAdmin: 'Hauptadmin', ownAccount: 'Eigenes Konto',
     adminOnlyPermissions: 'Nur der Hauptadmin kann Berechtigungen ändern.', adminLoading: 'Benutzer werden geladen …', adminSaved: 'Änderungen gespeichert.',
+    adminMigrationRequired: 'Die Datenbankmigration für Benutzerrechte fehlt noch. Führe supabase/schema.sql im Supabase SQL Editor aus.',
     p_plow: 'Pflügen', p_cultivate: 'Grubbern', p_sow: 'Säen', p_fertilize: 'Düngen', p_harvest: 'Ernten', p_mow: 'Mähen', p_bale: 'Ballen pressen', p_haul: 'Transportieren',
     seed1: 'Weizen ernten', seed2: 'Kartoffeln düngen', seed3: 'Claas Lexion warten',
     footer: 'Beispieldaten für die Layout-Vorschau. Noch keine Verbindung zu einem Live-Spielstand.',
@@ -532,9 +514,6 @@ const URG_RANK = { high: 0, medium: 1, low: 2 };
 
 let tasks = [];
 let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false };
-let currentIsSuperAdmin = false;
-let currentAuthUserId = null;
-let adminUsers = [];
 
 /* =====================================================================
    4. RENDERING
@@ -732,88 +711,6 @@ $('clearDone').addEventListener('click', async () => {
 });
 $('fName').addEventListener('input', () => { $('fErr').textContent = ''; });
 
-/* ---------- Admin dashboard ---------- */
-const STATUS_COLOR = { pending: 'var(--gold)', approved: 'var(--lime)', rejected: 'var(--clay)', blocked: '#ef6b6b' };
-
-function permissionCheckbox(user, key, label) {
-  const disabled = !currentIsSuperAdmin || user.is_super_admin;
-  return `<label class="permission-toggle"><input type="checkbox" data-permission="${key}" ${user[key] ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span>${label}</span></label>`;
-}
-
-function renderAdminUsers() {
-  if (!currentPermissions.can_manage_users) return;
-  const order = { pending: 0, approved: 1, rejected: 2, blocked: 3 };
-  const users = [...adminUsers].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || new Date(b.created_at) - new Date(a.created_at));
-  $('adminUsers').innerHTML = users.map(user => {
-    const isSelf = user.discord_id === currentAuthUserId;
-    const locked = user.is_super_admin || isSelf;
-    const statusButtons = locked ? `<span class="muted text-xs">${t(user.is_super_admin ? 'superAdmin' : 'ownAccount')}</span>` : `
-      ${user.status !== 'approved' ? `<button class="admin-action approve" data-status="approved">${t('approveUser')}</button>` : ''}
-      ${user.status !== 'rejected' ? `<button class="admin-action reject" data-status="rejected">${t('rejectUser')}</button>` : ''}
-      ${user.status !== 'blocked' ? `<button class="admin-action block" data-status="blocked">${t('blockUser')}</button>` : ''}
-      ${user.status !== 'pending' ? `<button class="admin-action" data-status="pending">${t('resetPending')}</button>` : ''}`;
-    const saveButton = currentIsSuperAdmin && !user.is_super_admin
-      ? `<button class="admin-action" data-save-permissions>${t('savePermissions')}</button>`
-      : '';
-
-    return `<div class="admin-user-row grid grid-cols-[minmax(220px,1.1fr)_130px_minmax(350px,1.5fr)_minmax(250px,1fr)] gap-4 px-4 py-3 items-center" data-user-id="${esc(user.discord_id)}">
-      <div class="flex items-center gap-3 min-w-0">
-        <img src="${esc(user.avatar)}" alt="" class="h-9 w-9 rounded-full flex-none">
-        <div class="min-w-0"><div class="font-semibold text-sm truncate">${esc(user.display_name)}</div><div class="muted text-xs truncate">${esc(user.username)} · ${esc(user.discord_id)}</div></div>
-      </div>
-      <div><span class="status-badge" style="--status-color:${STATUS_COLOR[user.status] || 'var(--muted)'}">${t('status_' + user.status)}</span></div>
-      <div><div class="permission-grid">
-        ${permissionCheckbox(user, 'can_create_tasks', t('permCreate'))}
-        ${permissionCheckbox(user, 'can_delete_tasks', t('permDelete'))}
-        ${permissionCheckbox(user, 'can_manage_users', t('permUsers'))}
-      </div>${saveButton ? `<div class="mt-2">${saveButton}</div>` : ''}</div>
-      <div class="flex flex-wrap gap-2">${statusButtons}</div>
-    </div>`;
-  }).join('') || `<p class="muted text-sm p-4">Keine Benutzer vorhanden.</p>`;
-}
-
-async function loadAdminUsers() {
-  if (!currentPermissions.can_manage_users) return;
-  $('adminFeedback').textContent = t('adminLoading');
-  try {
-    const data = await apiRequest('/api/admin/users');
-    adminUsers = data.users || [];
-    $('adminFeedback').textContent = currentIsSuperAdmin ? '' : t('adminOnlyPermissions');
-    renderAdminUsers();
-  } catch (error) {
-    $('adminFeedback').textContent = error.message;
-  }
-}
-
-$('adminReload').addEventListener('click', loadAdminUsers);
-$('adminUsers').addEventListener('click', async event => {
-  const row = event.target.closest('[data-user-id]');
-  if (!row) return;
-  const userId = row.dataset.userId;
-  const statusButton = event.target.closest('button[data-status]');
-  const permissionsButton = event.target.closest('button[data-save-permissions]');
-
-  try {
-    if (statusButton) {
-      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
-        method: 'PATCH', body: JSON.stringify({ status: statusButton.dataset.status })
-      });
-    } else if (permissionsButton) {
-      const permissions = {};
-      row.querySelectorAll('[data-permission]').forEach(input => { permissions[input.dataset.permission] = input.checked; });
-      await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/permissions`, {
-        method: 'PATCH', body: JSON.stringify({ permissions })
-      });
-    } else {
-      return;
-    }
-    $('adminFeedback').textContent = t('adminSaved');
-    await loadAdminUsers();
-  } catch (error) {
-    $('adminFeedback').textContent = error.message;
-  }
-});
-
 /* ---------- Map controls and cross-highlighting ---------- */
 $('filters').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -838,7 +735,7 @@ function applyLang() {
   $('lang').dataset.lang = lang;
   document.querySelectorAll('#lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   $('fErr').textContent = '';
-  renderPlayers(); renderFinance(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks(); renderAdminUsers();
+  renderPlayers(); renderFinance(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
 }
 $('lang').addEventListener('click', e => {
   const b = e.target.closest('button[data-lang]'); if (!b || b.dataset.lang === lang) return;
@@ -878,9 +775,7 @@ applyLang();
   }
 
   function unlock(user) {
-    currentAuthUserId = user.id;
     currentPermissions = { ...currentPermissions, ...(user.permissions || {}) };
-    currentIsSuperAdmin = Boolean(user.is_super_admin);
     authUsername.textContent = user.username || 'Discord-Nutzer';
     if (user.avatar) {
       authAvatar.src = user.avatar;
@@ -890,13 +785,11 @@ applyLang();
     }
     authUser.classList.remove('hidden');
     authUser.classList.add('flex');
-    document.getElementById('adminPanel').hidden = !currentPermissions.can_manage_users;
     document.getElementById('adminNav').hidden = !currentPermissions.can_manage_users;
     applyTaskPermissions();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;
     loadTasks();
-    if (currentPermissions.can_manage_users) loadAdminUsers();
   }
 
   async function checkAuth() {

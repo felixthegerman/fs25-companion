@@ -103,7 +103,7 @@ Am einfachsten ist GitHub + Render:
 
 ## Admin-Dashboard und Berechtigungen
 
-Der Hauptadmin wird ausschließlich über `ADMIN_DISCORD_ID=1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint in der Navigation der Bereich **Admin**.
+Der Hauptadmin wird ausschließlich über `ADMIN_DISCORD_ID=1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint nur für berechtigte Nutzer in der Navigation der eigene Bereich **Admin** unter `/admin`. Die Seite wird zusätzlich serverseitig geschützt und kann ohne `Nutzer verwalten` auch nicht direkt über die URL geöffnet werden.
 
 Dort kann der Hauptadmin:
 
@@ -115,7 +115,7 @@ Dort kann der Hauptadmin:
 
 Nutzer mit `Nutzer verwalten` dürfen das Admin-Dashboard öffnen und Zugangsstatus ändern. Nur der feste Hauptadmin darf Berechtigungen weitergeben oder entziehen. Aufgaben werden serverseitig in Supabase gespeichert, damit diese Rechte nicht im Browser umgangen werden können.
 
-Nach diesem Update muss `supabase/schema.sql` erneut vollständig im Supabase SQL Editor ausgeführt werden. Das Skript aktualisiert bestehende Installationen idempotent und legt die neue `tasks`-Tabelle sowie die Berechtigungsspalten an.
+Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im Supabase SQL Editor aus. Das Skript ist wiederholbar, aktualisiert auch ältere Tabellenstrukturen und legt fehlende Tabellen oder Spalten an, ohne bestehende Nutzer oder Aufgaben zu löschen.
 
 ## Sicherheitsdetails
 
