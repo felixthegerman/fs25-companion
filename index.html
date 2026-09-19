@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hollow Creek Farm - FS25 Dashboard</title>
-    <!-- UNPKG als blockierungssichere Alternative für dein Netzwerk -->
+    <!-- Zuverlässiges Alternativ-CDN (Kein jsdelivr!) -->
     <script src="https://unpkg.com"></script>
     <script src="https://unpkg.com"></script>
     <style>
@@ -92,11 +92,11 @@
 
     <!-- JAVASCRIPT-LOGIK -->
     <script>
-        // HIER DEINE ECHTEN CRUNCH-DATEN AUS SUPABASE EINTRAGEN!
-        const SUPABASE_URL = "https://mptwyhmkucsdlqparbof.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wdHd5aG1rdWNzZGxxcGFyYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mzk4MjAsImV4cCI6MjEwNTQxNTgyMH0.6yUmkHM3Xaapu2ZHsxQVpz15D7S9uji8tICUjtA8UI8";
+        // TRAGE HIER DEINE ECHTEN ZUGANGSDATEN AUS SUPABASE EIN!
+        const SUPABASE_URL = "DEINE_SUPABASE_URL";
+        const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
         
-        // Initialisierung korrigiert für unpkg Global-Scope
+        // REPARATUR: Greift absolut sicher über den globalen Window-Scope von unpkg auf Supabase zu
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentUser = null;
 
