@@ -77,7 +77,7 @@
         <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="var(--lime)" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="var(--lime)" fill-opacity=".35"/></svg>
         FS25 Companion
       </a>
-      <nav class="nav-links"><a class="nav-link" href="/">Dashboard</a><a class="nav-link active" href="/admin">Admin</a></nav>
+      <nav class="nav-links"><a class="nav-link" href="/">Dashboard</a><a class="nav-link" href="/finances">Finanzen</a><a class="nav-link active" href="/admin">Admin</a></nav>
       <div class="account"><img id="avatar" alt=""><span id="username" class="account-name"></span><a class="logout" href="/api/auth/logout">Abmelden</a></div>
     </div>
   </header>
@@ -114,6 +114,7 @@
     const STATUS = { pending:['Wartend','#F2B33D'], approved:['Angenommen','#8CCB5E'], rejected:['Abgelehnt','#D9805F'], blocked:['Gesperrt','#ef6b6b'] };
     let currentUser = null;
     let users = [];
+    let presenceTimer = null;
 
     const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     async function api(url, options = {}) {
@@ -149,6 +150,14 @@
       try { const data=await api('/api/admin/users'); users=data.users||[]; setFeedback(currentUser.is_super_admin?'':'Nur der Hauptadmin kann Berechtigungen ändern.'); render(); }
       catch(error){ setFeedback(error.message,true); }
     }
+    async function updatePresence() {
+      try { await api('/api/presence',{method:'POST'}); } catch (error) { console.warn(error.message); }
+    }
+    function startPresence() {
+      if (presenceTimer) return;
+      updatePresence();
+      presenceTimer=window.setInterval(updatePresence,30000);
+    }
     document.getElementById('users').addEventListener('click', async event => {
       const row=event.target.closest('[data-user-id]'); if(!row)return;
       const statusButton=event.target.closest('[data-status]'); const saveButton=event.target.closest('[data-save]'); if(!statusButton&&!saveButton)return;
@@ -168,6 +177,7 @@
         currentUser=auth.user;
         document.getElementById('username').textContent=currentUser.username;
         document.getElementById('avatar').src=currentUser.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
+        startPresence();
         if(currentUser.schema_ready===false){setFeedback('Führe zuerst supabase/schema.sql im Supabase SQL Editor aus.',true);return;}
         await loadUsers();
       } catch(error){window.location.replace('/');}

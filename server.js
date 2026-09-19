@@ -205,6 +205,7 @@ app.get('/api/auth/callback', async (req, res) => {
             can_create_tasks: isAdmin || Boolean(existingUser?.can_create_tasks),
             can_delete_tasks: isAdmin || Boolean(existingUser?.can_delete_tasks),
             can_manage_users: isAdmin || Boolean(existingUser?.can_manage_users),
+            last_seen_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
         };
 
@@ -422,6 +423,76 @@ app.delete('/api/tasks/:id', requireApprovedPermission('can_delete_tasks'), asyn
     res.json({ success: true });
 });
 
+app.post('/api/presence', requireApprovedPermission(), async (req, res) => {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+        .from('discord_users')
+        .update({ last_seen_at: now, updated_at: now })
+        .eq('discord_id', req.session.user.id);
+
+    if (error) return res.status(500).json({ error: 'Online-Status konnte nicht aktualisiert werden.' });
+    res.json({ success: true, last_seen_at: now });
+});
+
+app.get('/api/online-users', requireApprovedPermission(), async (req, res) => {
+    const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data: users, error } = await supabase
+        .from('discord_users')
+        .select('discord_id,username,global_name,avatar_hash,last_seen_at')
+        .eq('status', 'approved')
+        .gte('last_seen_at', cutoff)
+        .order('last_seen_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: 'Online-Nutzer konnten nicht geladen werden.' });
+    res.json({
+        users: users.map((user) => ({
+            id: user.discord_id,
+            username: user.global_name || user.username,
+            avatar: avatarUrlFromRecord(user),
+            last_seen_at: user.last_seen_at,
+        })),
+    });
+});
+
+app.get('/api/finances/summary', requireApprovedPermission(), async (req, res) => {
+    const weekStart = new Date();
+    weekStart.setUTCDate(weekStart.getUTCDate() - 7);
+
+    const [weekResult, latestResult] = await Promise.all([
+        supabase.from('finance_transactions').select('amount').gte('occurred_at', weekStart.toISOString()),
+        supabase.from('finance_transactions').select('balance_after,currency,occurred_at').order('occurred_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
+    if (weekResult.error || latestResult.error) {
+        return res.status(500).json({ error: 'Finanzübersicht konnte nicht geladen werden.' });
+    }
+
+    const amounts = (weekResult.data || []).map((row) => Number(row.amount) || 0);
+    const income = amounts.filter((amount) => amount > 0).reduce((sum, amount) => sum + amount, 0);
+    const expenses = amounts.filter((amount) => amount < 0).reduce((sum, amount) => sum + Math.abs(amount), 0);
+    res.json({
+        telemetry_connected: Boolean(latestResult.data),
+        balance: latestResult.data?.balance_after ?? null,
+        income,
+        expenses,
+        net: income - expenses,
+        currency: latestResult.data?.currency || 'USD',
+        updated_at: latestResult.data?.occurred_at || null,
+    });
+});
+
+app.get('/api/finances/transactions', requireApprovedPermission(), async (req, res) => {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 250);
+    const { data: transactions, error } = await supabase
+        .from('finance_transactions')
+        .select('id,occurred_at,category,description,amount,balance_after,currency')
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+
+    if (error) return res.status(500).json({ error: 'Finanztransaktionen konnten nicht geladen werden.' });
+    res.json({ transactions });
+});
+
 app.get('/api/public-config', (req, res) => {
     res.json({
         supabaseUrl: process.env.SUPABASE_URL,
@@ -429,7 +500,10 @@ app.get('/api/public-config', (req, res) => {
     });
 });
 
-app.get('/api/auth/logout', (req, res) => {
+app.get('/api/auth/logout', async (req, res) => {
+    if (req.session.user?.id) {
+        await supabase.from('discord_users').update({ last_seen_at: null }).eq('discord_id', req.session.user.id);
+    }
     req.session.destroy(() => {
         res.clearCookie('fs25.sid');
         res.redirect('/');
@@ -441,6 +515,10 @@ app.get('/admin', requireApprovedPermission('can_manage_users'), (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 app.get('/admin.html', (req, res) => res.redirect('/admin'));
+app.get('/finances', requireApprovedPermission(), (req, res) => {
+    res.sendFile(path.join(__dirname, 'finances.html'));
+});
+app.get('/finances.html', (req, res) => res.redirect('/finances'));
 app.use(express.static(path.join(__dirname)));
 
 const port = process.env.PORT || 10000;

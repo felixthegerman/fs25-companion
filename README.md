@@ -6,8 +6,9 @@ Dieses Projekt setzt dein vorhandenes `index.html` um und ergänzt:
 - neue Spieler zunächst `pending`
 - Admin-Freigabe über deine feste Discord-ID `1124793204588433518`
 - Status `pending / approved / blocked`
-- Discord-Username + Avatar + grünes `● Online` im Header
+- echte Online-Anzeige aller freigeschalteten Website-Nutzer mit Discord-Avatar
 - verstecktes Admin-Panel nur für den Admin
+- eigener Finanzbereich für alle freigeschalteten Nutzer
 - Supabase als persistente Datenbank
 - eine gemeinsame Express-App für Frontend und Backend, damit Sessions same-origin bleiben
 
@@ -98,7 +99,7 @@ Am einfachsten ist GitHub + Render:
 5. Neue Nutzer bekommen `pending`.
 6. Dein Admin-Login wird über `1124793204588433518` automatisch als `approved + admin` erkannt.
 7. Im Admin-Panel kannst du andere Nutzer zulassen oder sperren.
-8. Ein freigegebener Nutzer sieht oben Avatar, Discord-Name und `● Online`.
+8. Freigegebene Nutzer, die die Website gerade geöffnet haben, erscheinen mit ihrem echten Discord-Avatar im Header. Der Status wird alle 30 Sekunden aktualisiert und läuft nach zwei Minuten ohne Aktivität ab.
 9. Ein blockierter Nutzer wird bei der nächsten Statusabfrage wieder gesperrt.
 
 ## Admin-Dashboard und Berechtigungen
@@ -115,7 +116,13 @@ Dort kann der Hauptadmin:
 
 Nutzer mit `Nutzer verwalten` dürfen das Admin-Dashboard öffnen und Zugangsstatus ändern. Nur der feste Hauptadmin darf Berechtigungen weitergeben oder entziehen. Aufgaben werden serverseitig in Supabase gespeichert, damit diese Rechte nicht im Browser umgangen werden können.
 
-Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im Supabase SQL Editor aus. Das Skript ist wiederholbar, aktualisiert auch ältere Tabellenstrukturen und legt fehlende Tabellen oder Spalten an, ohne bestehende Nutzer oder Aufgaben zu löschen.
+## Finanzen und spätere FS25-Telemetrie
+
+Der Bereich **Finanzen** ist unter `/finances` für jeden freigeschalteten Nutzer erreichbar. Er enthält eine kompakte Übersicht für Kontostand, Einnahmen, Ausgaben und Ergebnis sowie ein detailliertes Buchungsjournal. Kategorien wie Fahrzeugkauf, Auftanken, Wartung und Ernteverkauf sind bereits vorbereitet.
+
+Solange noch keine FS25-Telemetrie angeschlossen ist, bleiben alle Finanzwerte und Listen bewusst leer. Auch Felder, Maschinen, Erntefortschritt und Arbeitsaufträge aus dem Spiel werden nicht mit Platzhalterdaten befüllt. Manuell angelegte Website-Aufgaben bleiben davon unberührt und werden weiterhin in Supabase gespeichert.
+
+Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im Supabase SQL Editor aus. Das Skript ist wiederholbar, aktualisiert auch ältere Tabellenstrukturen und legt fehlende Tabellen oder Spalten an. Echte Nutzer und Aufgaben bleiben erhalten; ausschließlich die früher fest eingebauten Demo-Aufgaben ohne Ersteller werden entfernt.
 
 ## Sicherheitsdetails
 
@@ -128,6 +135,4 @@ Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im 
 
 ### Wichtig für den späteren Live-Spielstand
 
-Das aktuelle Dashboard enthält weiterhin deine bisherigen Mock-Daten im HTML/JavaScript. Ein UI-Overlay ist kein Geheimschutz für bereits ausgelieferte statische Daten: Jeder Besucher kann den HTML/JS-Code grundsätzlich herunterladen.
-
-Sobald echte FS25-Save-/Telemetry-Daten angebunden werden, sollten diese Daten über geschützte `/api/...`-Endpunkte kommen und serverseitig gegen die Session + den Freigabestatus geprüft werden. Genau dafür ist die Trennung zwischen Browser und Express-Backend bereits vorbereitet.
+Die sichtbaren Mock-Daten wurden entfernt. Sobald echte FS25-Save-/Telemetry-Daten angebunden werden, sollten sie über geschützte `/api/...`-Endpunkte kommen und serverseitig gegen Session und Freigabestatus geprüft werden. Die Finanz-Tabelle und die getrennte Browser-/Backend-Struktur sind dafür bereits vorbereitet.

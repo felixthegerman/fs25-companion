@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Finanzen · FS25 Companion</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+    :root{--bg:#171715;--panel:#232220;--panel2:#2b2a27;--line:#3a3834;--text:#f3efe7;--muted:#afa697;--lime:#8ccb5e;--green:#367a4e;--gold:#f2b33d;--clay:#d9805f;--sky:#75b5d6}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}.nav{position:sticky;top:0;z-index:20;height:56px;background:rgba(26,25,23,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+    .nav-inner{max-width:1400px;height:100%;margin:auto;padding:0 24px;display:flex;align-items:center;gap:20px}.brand{display:flex;align-items:center;gap:9px;color:var(--text);text-decoration:none;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;white-space:nowrap}.nav-links{display:flex;gap:4px}.nav-link{padding:7px 11px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:14px}.nav-link:hover,.nav-link.active{color:var(--text);background:var(--panel2)}
+    .account{margin-left:auto;display:flex;align-items:center;gap:9px}.account img{width:29px;height:29px;border-radius:50%;object-fit:cover}.account-name{font-size:14px;font-weight:600}.logout{font-size:12px;color:var(--muted);text-decoration:none}.logout:hover{color:var(--text)}
+    main{max-width:1400px;margin:auto;padding:30px 24px 48px}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}h1,h2{font-family:'Barlow Condensed',sans-serif;margin:0}h1{font-size:38px;line-height:1}h2{font-size:21px}.muted{color:var(--muted)}.page-head p{margin:7px 0 0;font-size:14px}
+    .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}.stat,.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px}.stat{padding:18px 20px}.stat span{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}.stat strong{display:block;font-family:'Barlow Condensed',sans-serif;font-size:30px;letter-spacing:.2px}.stat small{display:block;margin-top:5px;color:var(--muted);font-size:11px}.panel{padding:20px}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:15px}.panel-head p{margin:4px 0 0;font-size:13px}.status{font-size:12px;padding:6px 9px;border-radius:999px;background:var(--panel2);color:var(--muted);white-space:nowrap}.status.live{color:var(--lime)}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}.table{min-width:760px}.row{display:grid;grid-template-columns:170px 150px minmax(260px,1fr) 150px 170px;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);font-size:13px}.row:last-child{border-bottom:0}.thead{color:var(--muted);font-size:12px;background:rgba(255,255,255,.015)}.amount{font-weight:700;text-align:right}.amount.in{color:var(--lime)}.amount.out{color:var(--clay)}.balance{text-align:right}.category{display:inline-flex;width:max-content;padding:5px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);font-size:11px}.empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.error{padding:12px 14px;border:1px solid rgba(217,128,95,.55);border-radius:9px;background:rgba(217,128,95,.1);color:#efb09a;font-size:13px;margin-bottom:14px}.error:empty{display:none}
+    @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:1fr}.page-head{align-items:flex-start;flex-direction:column}h1{font-size:32px}.panel{padding:14px}}
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="var(--lime)" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="var(--lime)" fill-opacity=".35"/></svg>
+        FS25 Companion
+      </a>
+      <nav class="nav-links"><a class="nav-link" href="/">Dashboard</a><a class="nav-link active" href="/finances">Finanzen</a><a id="adminLink" class="nav-link" href="/admin" hidden>Admin</a></nav>
+      <div class="account"><img id="avatar" alt="Discord-Profilbild"><span id="username" class="account-name"></span><a class="logout" href="/api/auth/logout">Abmelden</a></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <div><h1>Finanzen</h1><p class="muted">Übersicht und einzelne Buchungen aus der FS25-Telemetrie.</p></div>
+      <span id="updated" class="status">Noch keine Telemetrie</span>
+    </div>
+
+    <div id="error" class="error" role="alert"></div>
+    <section class="stats" aria-label="Finanzübersicht">
+      <div class="stat"><span>Kontostand</span><strong id="balance">–</strong><small>Letzter bekannter Spielstand</small></div>
+      <div class="stat"><span>Einnahmen · letzte 7 Tage</span><strong id="income" style="color:var(--lime)">–</strong><small>Summe positiver Buchungen</small></div>
+      <div class="stat"><span>Ausgaben · letzte 7 Tage</span><strong id="expenses" style="color:var(--clay)">–</strong><small>Summe negativer Buchungen</small></div>
+      <div class="stat"><span>Ergebnis · letzte 7 Tage</span><strong id="net">–</strong><small>Einnahmen abzüglich Ausgaben</small></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h2>Detaillierte Buchungen</h2><p class="muted">Zum Beispiel Fahrzeugkäufe, Verkäufe, Auftanken, Wartung oder Ernteerlöse.</p></div><span id="transactionCount" class="status">0 Buchungen</span></div>
+      <div class="table-wrap">
+        <div class="table">
+          <div class="row thead"><span>Zeitpunkt</span><span>Kategorie</span><span>Beschreibung</span><span style="text-align:right">Betrag</span><span style="text-align:right">Kontostand danach</span></div>
+          <div id="transactions"><div class="empty">Finanzdaten werden geladen …</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const CATEGORY = {vehicle_purchase:'Fahrzeugkauf',vehicle_sale:'Fahrzeugverkauf',refuel:'Auftanken',maintenance:'Wartung',crop_sale:'Ernteverkauf',land_purchase:'Feldkauf',loan:'Kredit',other:'Sonstiges'};
+    let presenceTimer=null;
+    const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    async function api(url,options={}){const response=await fetch(url,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Die Anfrage ist fehlgeschlagen.');return data;}
+    const currency=(value,code='USD')=>new Intl.NumberFormat('de-DE',{style:'currency',currency:code,maximumFractionDigits:2}).format(Number(value)||0);
+    const date=value=>new Intl.DateTimeFormat('de-DE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
+    function showSummary(summary){
+      if(!summary.telemetry_connected)return;
+      document.getElementById('balance').textContent=summary.balance==null?'–':currency(summary.balance,summary.currency);
+      document.getElementById('income').textContent=currency(summary.income,summary.currency);
+      document.getElementById('expenses').textContent='− '+currency(summary.expenses,summary.currency);
+      const net=document.getElementById('net');net.textContent=currency(summary.net,summary.currency);net.style.color=summary.net<0?'var(--clay)':'var(--lime)';
+      const updated=document.getElementById('updated');updated.textContent=`Aktualisiert ${date(summary.updated_at)}`;updated.classList.add('live');
+    }
+    function showTransactions(items){
+      document.getElementById('transactionCount').textContent=`${items.length} ${items.length===1?'Buchung':'Buchungen'}`;
+      document.getElementById('transactions').innerHTML=items.length?items.map(item=>{
+        const amount=Number(item.amount)||0;
+        return `<div class="row"><span class="muted">${date(item.occurred_at)}</span><span><span class="category">${esc(CATEGORY[item.category]||item.category||CATEGORY.other)}</span></span><span>${esc(item.description||'Keine Beschreibung')}</span><span class="amount ${amount>=0?'in':'out'}">${amount>=0?'+ ':'− '}${currency(Math.abs(amount),item.currency)}</span><span class="balance">${item.balance_after==null?'–':currency(item.balance_after,item.currency)}</span></div>`;
+      }).join(''):'<div class="empty">Noch keine Finanzdaten vorhanden. Diese Ansicht wird später automatisch mit der FS25-Telemetrie befüllt.</div>';
+    }
+    async function updatePresence(){try{await api('/api/presence',{method:'POST'});}catch(error){console.warn(error.message);}}
+    function startPresence(){if(presenceTimer)return;updatePresence();presenceTimer=window.setInterval(updatePresence,30000);}
+    (async()=>{
+      try{
+        const auth=await api('/api/auth/me');
+        if(!auth.loggedIn||!auth.user.is_approved){window.location.replace('/');return;}
+        document.getElementById('username').textContent=auth.user.username||'Discord-Nutzer';
+        document.getElementById('avatar').src=auth.user.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
+        document.getElementById('adminLink').hidden=!auth.user.permissions?.can_manage_users;
+        startPresence();
+        const [summary,ledger]=await Promise.all([api('/api/finances/summary'),api('/api/finances/transactions?limit=250')]);
+        showSummary(summary);showTransactions(ledger.transactions||[]);
+      }catch(error){document.getElementById('error').textContent=error.message;document.getElementById('transactions').innerHTML='<div class="empty">Finanzdaten konnten nicht geladen werden.</div>';}
+    })();
+  </script>
+</body>
+</html>

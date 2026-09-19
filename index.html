@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Hollow Creek Farm, FS25 Companion</title>
+<title>FS25 Farm-Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
@@ -176,6 +176,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
       <a class="lnk" href="#map" data-i18n="navMap"></a>
       <a class="lnk" href="#machines" data-i18n="navMachines"></a>
       <a class="lnk" href="#tasks" data-i18n="navTasks"></a>
+      <a class="lnk" href="/finances" data-i18n="navFinances"></a>
       <a id="adminNav" class="lnk" href="/admin" data-i18n="navAdmin" hidden></a>
     </nav>
     <div class="ml-auto flex items-center gap-3">
@@ -198,31 +199,16 @@ tailwind.config = { theme: { extend: { fontFamily: {
 <div id="dashboardRoot" class="mx-auto max-w-[1400px] px-4 sm:px-6 py-6">
 
   <div class="mb-5">
-    <h1 class="font-display text-3xl sm:text-4xl font-bold tracking-tight">Hollow Creek Farm</h1>
+    <h1 class="font-display text-3xl sm:text-4xl font-bold tracking-tight">FS25 Farm-Dashboard</h1>
     <p class="muted mt-1 text-sm" data-i18n="sub"></p>
   </div>
-
-  <!-- Finances -->
-  <section class="panel p-4 sm:p-5 mb-5 grid grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_1.5fr] gap-5 items-center" aria-labelledby="fin-h">
-    <div class="col-span-2 lg:col-span-1">
-      <h2 id="fin-h" class="muted text-sm" data-i18n="balance"></h2>
-      <p id="balance" class="font-display text-4xl font-bold tracking-tight mt-0.5"></p>
-    </div>
-    <div><p class="muted text-sm" data-i18n="income"></p><p id="inc" class="font-display text-2xl font-semibold" style="color:var(--lime)"></p></div>
-    <div><p class="muted text-sm" data-i18n="maint"></p><p id="mnt" class="font-display text-2xl font-semibold" style="color:var(--clay)"></p></div>
-    <div><p class="muted text-sm" data-i18n="net"></p><p id="net" class="font-display text-2xl font-semibold"></p></div>
-    <div class="col-span-2 lg:col-span-1">
-      <p class="muted text-xs mb-1" data-i18n="chartCap"></p>
-      <div id="chart" class="flex items-end gap-2 h-14" role="img" data-i18n-aria="chartAria"></div>
-    </div>
-  </section>
 
   <!-- Map + sidebar -->
   <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_310px] gap-5 mb-5">
     <section id="map" class="panel p-4 sm:p-5" aria-labelledby="map-h">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 id="map-h" class="h2" data-i18n="mapTitle"></h2>
-        <div class="flex items-center gap-3">
+        <div id="fieldControls" class="flex items-center gap-3">
           <span id="tog-label" class="text-sm" data-i18n="showUnowned"></span>
           <button id="tog" type="button" role="switch" aria-checked="true" aria-labelledby="tog-label" class="switch"><span class="knob"></span></button>
         </div>
@@ -310,15 +296,16 @@ tailwind.config = { theme: { extend: { fontFamily: {
    ===================================================================== */
 const i18n = {
   en: {
-    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', navAdmin: 'Admin', langLabel: 'Language',
-    sub: 'Riverbend Springs, multiplayer server. Spring, day 14, 09:40 in game.',
+    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', navFinances: 'Finances', navAdmin: 'Admin', langLabel: 'Language',
+    sub: 'FS25 telemetry is not connected yet.',
     balance: 'Farm balance', income: 'Income this week', maint: 'Maintenance costs', net: 'Net this week',
     chartCap: 'Daily income and maintenance, days 8 to 14', chartAria: 'Bar chart of daily income and maintenance costs',
     mapTitle: 'Field map', showUnowned: 'Show Unowned Fields', filterAria: 'Filter fields by growth stage', allFields: 'All fields',
     mapSum: '{owned} owned fields, {ha} ha, {ready} ready to harvest', mapSale: ', {n} for sale',
     forSale: 'For sale', onRequest: 'On request', noActivity: 'No activity', wip: 'Work in progress', fieldN: 'Field {n}', yard: 'Farmyard',
     st_fallow: 'Fallow', st_plowed: 'Cultivated', st_sown: 'Seedbed', st_growing: 'Growing', st_ready: 'Ready to harvest',
-    opsTitle: 'Active operations queue', opsSum: '{n} active', opsEmpty: 'No helpers are working right now.',
+    telemetryEmpty: 'No telemetry data available yet.', fieldsEmpty: 'Fields will appear here after the FS25 telemetry integration.', machinesEmpty: 'Machines will appear here after the FS25 telemetry integration.',
+    opsTitle: 'Active operations queue', opsSum: '{n} active', opsEmpty: 'No telemetry data available yet.',
     yieldTitle: 'Yield readiness tracker', yieldSum: '{n} fields ready to harvest now. Next to mature:', dayOne: '{n} day', dayMany: '{n} days',
     machTitle: 'Machines out in the field', machSum: '{a} active, {i} idle',
     s_working: 'Working', s_hauling: 'On the road', s_idle: 'Idle', onRoad: 'On the road', inYard: 'In the yard', helper: 'AI helper {n}',
@@ -339,22 +326,22 @@ const i18n = {
     adminOnlyPermissions: 'Only the primary admin can change permissions.', adminLoading: 'Loading users …', adminSaved: 'Changes saved.',
     adminMigrationRequired: 'The database migration for user permissions is still missing. Run supabase/schema.sql in the Supabase SQL Editor.',
     p_plow: 'Plow', p_cultivate: 'Cultivate', p_sow: 'Sow', p_fertilize: 'Fertilize', p_harvest: 'Harvest', p_mow: 'Mow', p_bale: 'Bale', p_haul: 'Haul',
-    seed1: 'Harvest the wheat', seed2: 'Fertilize the potatoes', seed3: 'Service the Claas Lexion',
-    footer: 'Sample data for layout preview. Nothing here is connected to a live save yet.',
+    footer: 'No placeholder game data is shown. Live values will appear after the FS25 telemetry integration.',
     crops: { WHEAT: 'Wheat', BARLEY: 'Barley', OAT: 'Oats', CANOLA: 'Canola', SORGHUM: 'Sorghum', SOYBEAN: 'Soybeans', SUNFLOWER: 'Sunflower', MAIZE: 'Corn', POTATO: 'Potatoes',
       SUGARBEET: 'Sugar beet', COTTON: 'Cotton', SUGARCANE: 'Sugar cane', GRASS: 'Grass', PEA: 'Peas', SPINACH: 'Spinach', GREENBEAN: 'Green beans', CARROT: 'Carrots',
       PARSNIP: 'Parsnips', REDBEET: 'Red beet', RICE: 'Rice', HEMP: 'Hemp', SPELT: 'Spelt' }
   },
   de: {
-    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navAdmin: 'Admin', langLabel: 'Sprache',
-    sub: 'Riverbend Springs, Multiplayer-Server. Frühling, Tag 14, 09:40 Uhr im Spiel.',
+    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navFinances: 'Finanzen', navAdmin: 'Admin', langLabel: 'Sprache',
+    sub: 'Die FS25-Telemetrie ist noch nicht verbunden.',
     balance: 'Kontostand', income: 'Einnahmen diese Woche', maint: 'Wartungskosten', net: 'Ergebnis diese Woche',
     chartCap: 'Tägliche Einnahmen und Wartung, Tag 8 bis 14', chartAria: 'Balkendiagramm der täglichen Einnahmen und Wartungskosten',
     mapTitle: 'Feldkarte', showUnowned: 'Nicht erworbene Felder anzeigen', filterAria: 'Felder nach Wachstumsstufe filtern', allFields: 'Alle Felder',
     mapSum: '{owned} eigene Felder, {ha} ha, {ready} erntereif', mapSale: ', {n} zum Verkauf',
     forSale: 'Zu verkaufen', onRequest: 'Auf Anfrage', noActivity: 'Keine Aktivität', wip: 'Arbeit läuft', fieldN: 'Feld {n}', yard: 'Hof',
     st_fallow: 'Brache', st_plowed: 'Bearbeitet', st_sown: 'Saatbett', st_growing: 'Wachsend', st_ready: 'Erntereif',
-    opsTitle: 'Aktive Arbeitsaufträge', opsSum: '{n} aktiv', opsEmpty: 'Momentan arbeitet kein Helfer.',
+    telemetryEmpty: 'Noch keine Telemetriedaten verfügbar.', fieldsEmpty: 'Felder erscheinen hier nach der FS25-Telemetrieintegration.', machinesEmpty: 'Maschinen erscheinen hier nach der FS25-Telemetrieintegration.',
+    opsTitle: 'Aktive Arbeitsaufträge', opsSum: '{n} aktiv', opsEmpty: 'Noch keine Telemetriedaten verfügbar.',
     yieldTitle: 'Ernte-Bereitschaft', yieldSum: '{n} Felder sind jetzt erntereif. Als Nächstes reif:', dayOne: '{n} Tag', dayMany: '{n} Tage',
     machTitle: 'Maschinen im Einsatz auf dem Feld', machSum: '{a} aktiv, {i} im Leerlauf',
     s_working: 'Arbeitet', s_hauling: 'Unterwegs', s_idle: 'Leerlauf', onRoad: 'Unterwegs', inYard: 'Auf dem Hof', helper: 'KI-Helfer {n}',
@@ -375,8 +362,7 @@ const i18n = {
     adminOnlyPermissions: 'Nur der Hauptadmin kann Berechtigungen ändern.', adminLoading: 'Benutzer werden geladen …', adminSaved: 'Änderungen gespeichert.',
     adminMigrationRequired: 'Die Datenbankmigration für Benutzerrechte fehlt noch. Führe supabase/schema.sql im Supabase SQL Editor aus.',
     p_plow: 'Pflügen', p_cultivate: 'Grubbern', p_sow: 'Säen', p_fertilize: 'Düngen', p_harvest: 'Ernten', p_mow: 'Mähen', p_bale: 'Ballen pressen', p_haul: 'Transportieren',
-    seed1: 'Weizen ernten', seed2: 'Kartoffeln düngen', seed3: 'Claas Lexion warten',
-    footer: 'Beispieldaten für die Layout-Vorschau. Noch keine Verbindung zu einem Live-Spielstand.',
+    footer: 'Es werden keine Platzhalter-Spieldaten angezeigt. Live-Werte erscheinen nach der FS25-Telemetrieintegration.',
     crops: { WHEAT: 'Weizen', BARLEY: 'Gerste', OAT: 'Hafer', CANOLA: 'Raps', SORGHUM: 'Sorghum', SOYBEAN: 'Sojabohnen', SUNFLOWER: 'Sonnenblumen', MAIZE: 'Mais', POTATO: 'Kartoffeln',
       SUGARBEET: 'Zuckerrüben', COTTON: 'Baumwolle', SUGARCANE: 'Zuckerrohr', GRASS: 'Gras', PEA: 'Erbsen', SPINACH: 'Spinat', GREENBEAN: 'Grüne Bohnen', CARROT: 'Karotten',
       PARSNIP: 'Pastinaken', REDBEET: 'Rote Bete', RICE: 'Reis', HEMP: 'Hanf', SPELT: 'Dinkel' }
@@ -465,49 +451,14 @@ const ui = {
 };
 const uiSvg = (k, s = 14) => svg(ui[k], s).replace('stroke-width="1.5"', 'stroke-width="1.7"');
 
-/* =====================================================================
-   3. DATA (mock). Crops use telemetry-style strings.
-   ===================================================================== */
+/* Telemetry collections stay empty until the FS25 integration is added. */
 const STAGE_ORDER = ['fallow', 'plowed', 'sown', 'growing', 'ready'];
 const stageColor = { fallow: '#B9A97F', plowed: '#D19563', sown: '#E0CB6E', growing: '#9BD46A', ready: '#F2B33D' };
 const stageLabel = k => (i18n[lang]['st_' + k] ?? i18n.en['st_' + k]) || prettify(k);
-
-const fields = [
-  { n: 1,  crop: 'WHEAT',     ha: 4.2, stage: 'growing', pct: 62,  eta: 4, owned: true },
-  { n: 2,  crop: 'BARLEY',    ha: 3.1, stage: 'plowed',  pct: 10,  owned: true },
-  { n: 3,  crop: 'SUNFLOWER', ha: 5.6, stage: 'ready',   pct: 100, owned: true },
-  { n: 4,  crop: 'MAIZE',     ha: 6.8, stage: 'fallow',  pct: 0,   owned: true },
-  { n: 5,  crop: 'HEMP',      ha: 3.9, stage: 'growing', pct: 48,  eta: 7, owned: true },
-  { n: 6,  crop: 'POTATO',    ha: 4.4, stage: 'sown',    pct: 12,  owned: true },
-  { n: 7,  crop: 'WHEAT',     ha: 7.2, stage: 'ready',   pct: 100, owned: true },
-  { n: 8,  crop: 'POTATO',    ha: 2.8, stage: 'growing', pct: 80,  eta: 2, owned: true },
-  { n: 9,  crop: 'BARLEY',    ha: 3.6, stage: 'growing', pct: 34,  eta: 6, owned: true },
-  { n: 10, crop: 'MAIZE',     ha: 2.5, stage: 'ready',   pct: 100, owned: true },
-  { n: 11, crop: 'HEMP',      ha: 5.0, stage: 'growing', pct: 71,  eta: 3, owned: true },
-  { n: 12, crop: 'MAIZE',     ha: 6.1, stage: 'sown',    pct: 5,   owned: true },
-  { n: 13, crop: 'SUNFLOWER', ha: 3.3, stage: 'fallow',  pct: 0,   owned: true },
-  { n: 14, crop: 'WHEAT',     ha: 4.8, stage: 'growing', pct: 22,  eta: 8, owned: true },
-  { n: 15, crop: 'BARLEY',    ha: 8.4, stage: 'ready',   pct: 100, owned: true },
-  { n: 16, crop: 'SUNFLOWER', ha: 4.0, stage: 'growing', pct: 90,  eta: 1, owned: true },
-  { n: 17, crop: 'WHEAT',     ha: 5.4, stage: 'growing', pct: 45,  owned: false, price: 125000 },
-  { n: 18, crop: 'MAIZE',     ha: 6.6, stage: 'growing', pct: 58,  owned: false, price: 158400 },
-  { n: 19, crop: 'POTATO',    ha: 3.0, stage: 'sown',    pct: 9,   owned: false, price: 74000 },
-  { n: 20, crop: 'HEMP',      ha: 4.1, stage: 'growing', pct: 30,  owned: false, price: 98500 },
-  { n: 21, crop: 'SPELT',     ha: 3.7, stage: 'ready',   pct: 100, owned: false, price: 89200 }  /* unmapped crop: exercises the SVG fallback */
-];
-const machines = [
-  { name: 'John Deere 8R 410', type: 'ty_plow',     kind: 'tractor', op: 'Jonas', task: 'k_plowing',    status: 'working', field: 4 },
-  { name: 'Claas Lexion 8900', type: 'ty_combine',  kind: 'combine', op: 'Marta', task: 'k_harvesting', status: 'working', field: 7 },
-  { name: 'Fendt 942 Vario',   type: 'ty_seeder',   kind: 'tractor', helper: 2,    task: 'k_sowing',     status: 'working', field: 12 },
-  { name: 'Krone BiG X 1180',  type: 'ty_forage',   kind: 'combine', op: 'Lena',  task: 'k_harvesting', status: 'working', field: 15 },
-  { name: 'Case IH Magnum',    type: 'ty_cult',     kind: 'tractor', helper: 1,    task: 'k_cultivating',status: 'working', field: 2 },
-  { name: 'MAN TGX 26.510',    type: 'ty_truck',    kind: 'truck',   op: 'Kev',   task: 'k_hauling',    status: 'hauling', field: null },
-  { name: 'New Holland T7',    type: 'ty_baler',    kind: 'tractor', task: 'k_parked', status: 'idle', field: null },
-  { name: 'Claas Xerion 5000', type: 'ty_tractor',  kind: 'tractor', task: 'k_parked', status: 'idle', field: null }
-];
+const fields = [];
+const machines = [];
 const STATUS_DOT = { working: 'var(--lime)', hauling: 'var(--sky)', idle: 'var(--muted)' };
-const players = [{ n: 'Jonas', c: '#8CCB5E' }, { n: 'Marta', c: '#D9805F' }, { n: 'Kev', c: '#6FA8C9' }, { n: 'Lena', c: '#E0CB6E' }];
-const income = [9200, 14800, 6120, 18400, 11300, 15900, 10700], maint = [1400, 2100, 800, 2600, 1900, 1740, 1800], balance = 1284560;
+let players = [];
 const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', 'p_mow', 'p_bale', 'p_haul'];
 const URG_COLOR = { low: 'var(--sky)', medium: 'var(--gold)', high: 'var(--clay)' };
 const URG_RANK = { high: 0, medium: 1, low: 2 };
@@ -528,7 +479,10 @@ let activeStage = 'all', showUnowned = true;
 const visibleFields = () => fields.filter(f => f.owned || showUnowned);
 
 function renderPlayers() {
-  $('players').innerHTML = players.map(p => `<span title="${p.n}" class="inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold" style="background:${p.c};color:#1A1917;border:2px solid var(--bg)">${p.n[0]}</span>`).join('');
+  $('players').innerHTML = players.map(p => `<span title="${esc(p.username)} · Online" class="relative inline-flex w-8 h-8 rounded-full" style="border:2px solid var(--bg)">
+    <img src="${esc(p.avatar)}" alt="${esc(p.username)}" class="w-full h-full rounded-full object-cover">
+    <span aria-hidden="true" style="position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--lime);border:2px solid var(--bg)"></span>
+  </span>`).join('');
 }
 
 function cardHTML(f) {
@@ -548,6 +502,13 @@ function cardHTML(f) {
 }
 
 function renderMap() {
+  if (!fields.length) {
+    $('fieldControls').hidden = true;
+    $('map-sum').textContent = t('telemetryEmpty');
+    $('fields').innerHTML = `<div class="muted text-sm text-center" style="grid-column:1/-1;padding:42px 18px">${t('fieldsEmpty')}</div>`;
+    return;
+  }
+  $('fieldControls').hidden = false;
   $('fields').innerHTML = visibleFields().map(cardHTML).join('');
   const owned = fields.filter(f => f.owned);
   $('map-sum').textContent = t('mapSum', { owned: owned.length, ha: num1(sum(owned.map(f => f.ha))), ready: owned.filter(f => f.stage === 'ready').length }) +
@@ -555,6 +516,7 @@ function renderMap() {
 }
 
 function renderFilters() {
+  if (!fields.length) { $('filters').innerHTML = ''; return; }
   const list = visibleFields(), counts = {};
   list.forEach(f => counts[f.stage] = (counts[f.stage] || 0) + 1);
   const keys = [...STAGE_ORDER, ...Object.keys(counts).filter(k => !STAGE_ORDER.includes(k))];
@@ -575,6 +537,11 @@ function renderOps() {
 
 function renderYield() {
   const owned = fields.filter(f => f.owned);
+  if (!owned.length) {
+    $('yield-sum').textContent = t('telemetryEmpty');
+    $('yield').innerHTML = '';
+    return;
+  }
   $('yield-sum').textContent = t('yieldSum', { n: owned.filter(f => f.stage === 'ready').length });
   $('yield').innerHTML = owned.filter(f => f.stage === 'growing').sort((a, b) => a.eta - b.eta || b.pct - a.pct).slice(0, 5).map(f => `
     <li class="item hit" tabindex="0" data-field="${f.n}"><span class="tile">${cropImg(f.crop, 22)}</span>
@@ -583,6 +550,11 @@ function renderYield() {
 }
 
 function renderMachines() {
+  if (!machines.length) {
+    $('machList').innerHTML = `<li class="muted text-sm text-center" style="grid-column:1/-1;padding:28px 12px">${t('machinesEmpty')}</li>`;
+    $('mach-sum').textContent = t('telemetryEmpty');
+    return;
+  }
   $('machList').innerHTML = machines.map(m => {
     const who = opName(m), loc2 = m.field ? `<span class="pill on">${t('fieldN', { n: m.field })}</span>` : `<span class="pill muted">${t(m.status === 'hauling' ? 'onRoad' : 'inYard')}</span>`;
     return `<li class="mcard hit" tabindex="0" ${m.field ? `data-field="${m.field}"` : ''}><span class="tile" style="color:var(--text)">${svg(ui[m.kind] || ui.tractor, 22)}</span>
@@ -592,17 +564,6 @@ function renderMachines() {
   }).join('');
   const act = machines.filter(m => m.status !== 'idle').length;
   $('mach-sum').textContent = t('machSum', { a: act, i: machines.length - act });
-}
-
-function renderFinance() {
-  const inc = sum(income), mnt = sum(maint), max = Math.max(...income);
-  $('balance').textContent = money(balance); $('inc').textContent = money(inc);
-  $('mnt').textContent = '-' + money(mnt); $('net').textContent = '+' + money(inc - mnt);
-  $('chart').innerHTML = income.map((v, i) => `<div class="flex-1 flex flex-col items-center gap-1 h-full justify-end">
-    <div class="flex items-end gap-0.5 w-full justify-center flex-1">
-      <div title="${t('income')}: ${money(v)}" style="width:44%;height:${(v / max) * 100}%;background:var(--lime);border-radius:2px 2px 0 0"></div>
-      <div title="${t('maint')}: ${money(maint[i])}" style="width:44%;height:${Math.max(4, (maint[i] / max) * 100)}%;background:var(--clay);border-radius:2px 2px 0 0"></div>
-    </div><span class="muted text-[10px]">${8 + i}</span></div>`).join('');
 }
 
 /* ---------- Task board ---------- */
@@ -641,7 +602,7 @@ function renderForm() {
   sel.innerHTML = `<option value="">${t('yard')}</option>` + fields.filter(f => f.owned).map(f => `<option value="${f.n}">${t('fieldN', { n: f.n })}, ${esc(cropName(f.crop))}</option>`).join('');
   sel.value = cur;
   $('taskList').innerHTML = PRESETS.map(k => `<option value="${esc(t(k))}"></option>`).join('');
-  $('playerList').innerHTML = players.map(p => `<option value="${p.n}"></option>`).join('');
+  $('playerList').innerHTML = players.map(p => `<option value="${esc(p.username)}"></option>`).join('');
 }
 
 function renderTasks(focusId) {
@@ -735,7 +696,7 @@ function applyLang() {
   $('lang').dataset.lang = lang;
   document.querySelectorAll('#lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   $('fErr').textContent = '';
-  renderPlayers(); renderFinance(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
+  renderPlayers(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
 }
 $('lang').addEventListener('click', e => {
   const b = e.target.closest('button[data-lang]'); if (!b || b.dataset.lang === lang) return;
@@ -756,6 +717,7 @@ applyLang();
   const authUser = document.getElementById('authUser');
   const authAvatar = document.getElementById('authAvatar');
   const authUsername = document.getElementById('authUsername');
+  let presenceTimer = null;
 
   const errors = {
     auth_failed: 'Die Discord-Anmeldung ist fehlgeschlagen. Bitte versuche es erneut.',
@@ -790,6 +752,25 @@ applyLang();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;
     loadTasks();
+    startPresence();
+  }
+
+  async function refreshPresence() {
+    try {
+      await apiRequest('/api/presence', { method: 'POST' });
+      const data = await apiRequest('/api/online-users');
+      players = data.users || [];
+      renderPlayers();
+      renderForm();
+    } catch (error) {
+      console.warn('Online-Status konnte nicht aktualisiert werden:', error.message);
+    }
+  }
+
+  function startPresence() {
+    if (presenceTimer) return;
+    refreshPresence();
+    presenceTimer = window.setInterval(refreshPresence, 30000);
   }
 
   async function checkAuth() {
