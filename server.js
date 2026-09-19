@@ -42,7 +42,7 @@ app.get('/api/auth/callback', async (req, res) => {
 
         // User-Daten abfragen
         const userResponse = await axios.get('https://discord.com', {
-            headers: { Authorization: f"Bearer {tokenResponse.data.access_token}" }
+            headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` }
         });
 
         const discordUser = userResponse.data;
@@ -69,7 +69,7 @@ app.get('/api/auth/callback', async (req, res) => {
         req.session.user = {
             id: discordUser.id,
             username: discordUser.username,
-            avatar: f"https://discordapp.com{discordUser.id}/{discordUser.avatar}.png",
+            avatar: `https://discordapp.com{discordUser.id}/${discordUser.avatar}.png`,
             is_approved: user ? user.is_approved : isAdmin,
             is_admin: isAdmin
         };
@@ -107,4 +107,4 @@ app.get('/api/auth/logout', (req, res) => {
     res.redirect('/');
 });
 
-app.listen(process.env.PORT, () => console.log(f"Server läuft auf Port {process.env.PORT}"));
+app.listen(process.env.PORT, () => console.log(`Server läuft auf Port ${process.env.PORT}`));
