@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hollow Creek Farm - FS25 Dashboard</title>
-    <script src="https://tailwindcss.com"></script>
-    <!-- HIER WAR DER FEHLER: Der korrekte, vollständige Supabase-Link -->
-    <script src="https://jsdelivr.net"></script>
+    <!-- UNPKG als blockierungssichere Alternative für dein Netzwerk -->
+    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com"></script>
     <style>
         body { background-color: #1A1917; color: #F3F4F6; font-family: ui-sans-serif, system-ui, sans-serif; }
         .bg-farm-green { background-color: #2A4523; }
@@ -92,11 +92,12 @@
 
     <!-- JAVASCRIPT-LOGIK -->
     <script>
-        // TRAGE HIER DEINE ECHTEN ZUGANGSDATEN EIN!
-        const SUPABASE_URL = "DEINE_SUPABASE_URL";
-        const SUPABASE_ANON_KEY = "DEIN_SUPABASE_ANON_KEY";
+        // HIER DEINE ECHTEN CRUNCH-DATEN AUS SUPABASE EINTRAGEN!
+        const SUPABASE_URL = "https://mptwyhmkucsdlqparbof.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wdHd5aG1rdWNzZGxxcGFyYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mzk4MjAsImV4cCI6MjEwNTQxNTgyMH0.6yUmkHM3Xaapu2ZHsxQVpz15D7S9uji8tICUjtA8UI8";
         
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Initialisierung korrigiert für unpkg Global-Scope
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentUser = null;
 
         async function checkAuth() {
@@ -109,27 +110,31 @@
                 const waitingOverlay = document.getElementById('waitingOverlay');
 
                 if (!data.loggedIn) {
-                    loginOverlay.classList.remove('hidden');
-                    dashboard.classList.add('blur-bg');
+                    if (loginOverlay) loginOverlay.classList.remove('hidden');
+                    if (dashboard) dashboard.classList.add('blur-bg');
                     return;
                 }
 
                 currentUser = data.user;
 
                 if (!currentUser.is_approved) {
-                    loginOverlay.classList.add('hidden');
-                    waitingOverlay.classList.remove('hidden');
-                    dashboard.classList.add('blur-bg');
+                    if (loginOverlay) loginOverlay.classList.add('hidden');
+                    if (waitingOverlay) waitingOverlay.classList.remove('hidden');
+                    if (dashboard) dashboard.classList.add('blur-bg');
                     return;
                 }
 
-                loginOverlay.classList.add('hidden');
-                waitingOverlay.classList.add('hidden');
-                dashboard.classList.remove('blur-bg');
+                if (loginOverlay) loginOverlay.classList.add('hidden');
+                if (waitingOverlay) waitingOverlay.classList.add('hidden');
+                if (dashboard) dashboard.classList.remove('blur-bg');
 
-                document.getElementById('activeUser').innerText = currentUser.username;
-                document.getElementById('userStatus').classList.remove('hidden');
-                document.getElementById('userStatus').classList.add('inline-flex');
+                const activeUserEl = document.getElementById('activeUser');
+                const userStatusEl = document.getElementById('userStatus');
+                if (activeUserEl) activeUserEl.innerText = currentUser.username;
+                if (userStatusEl) {
+                    userStatusEl.classList.remove('hidden');
+                    userStatusEl.classList.add('inline-flex');
+                }
 
                 initRealtime();
                 loadFieldsFromDatabase();
@@ -145,7 +150,8 @@
             
             supabaseClient.channel('public:farm_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'farm_stats' }, payload => {
                 if (payload.new) {
-                    document.getElementById('farmMoney').innerText = payload.new.money.toLocaleString('de-DE') + " €";
+                    const moneyEl = document.getElementById('farmMoney');
+                    if (moneyEl) moneyEl.innerText = payload.new.money.toLocaleString('de-DE') + " €";
                 }
             }).subscribe();
         }
@@ -157,7 +163,7 @@
             grid.innerHTML = '';
 
             if (!fields || fields.length === 0) {
-                grid.innerHTML = '<p class="text-stone-500 text-sm p-4 col-span-full text-center">Warte auf Live-Daten...</p>';
+                grid.innerHTML = '<p class="text-stone-500 text-sm p-4 col-span-full text-center">Warte auf Live-Daten vom FS25-Server...</p>';
                 return;
             }
 
@@ -167,12 +173,12 @@
                     <div class="${isUnowned ? 'bg-stone-900/45 border-stone-800 opacity-50' : 'bg-farm-green border-emerald-700'} p-4 rounded-xl border relative overflow-hidden flex flex-col justify-between h-32">
                         <div class="flex justify-between items-start">
                             <span class="text-2xl font-black">${field.field_number}</span>
-                            <img src="assets/icons/${field.crop_type.toLowerCase()}.png" class="w-6 h-6 object-contain" onerror="this.outerHTML='🌾'">
+                            <img src="assets/icons/${field.crop_type ? field.crop_type.toLowerCase() : 'wheat'}.png" class="w-6 h-6 object-contain" onerror="this.outerHTML='🌾'">
                         </div>
                         <div>
-                            <p class="text-sm font-bold truncate">${field.crop_type}</p>
+                            <p class="text-sm font-bold truncate">${field.crop_type || 'WHEAT'}</p>
                             <p class="text-xs font-medium tracking-wide">
-                                ${isUnowned ? '💰 ' + field.price.toLocaleString('de-DE') + ' $' : '🌱 ' + field.growth_stage}
+                                ${isUnowned ? '💰 ' + (field.price || 0).toLocaleString('de-DE') + ' $' : '🌱 ' + (field.growth_stage || 'growing')}
                             </p>
                         </div>
                     </div>
