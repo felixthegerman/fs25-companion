@@ -47,10 +47,12 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .switch[aria-checked="true"] .knob { transform: translateX(20px); background: #F1F6EC; }
 
   /* Map */
-  .live-map-card { position: relative; min-height: 430px; aspect-ratio: 16/9; overflow: hidden; border: 1px solid var(--line); border-radius: 11px;
-    background-color: #263528; background-image: linear-gradient(rgba(12,18,13,.13),rgba(12,18,13,.32)), url('/assets/map-background.svg'); background-size: cover; background-position: center; }
+  .live-map-card { position: relative; min-height: 430px; aspect-ratio: 16/9; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background:#22251d; cursor: grab; touch-action: none; }
+  .live-map-card.dragging { cursor: grabbing; }
   .live-map-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 70px rgba(0,0,0,.36); }
+  .live-map-world { position: absolute; inset: 0; transform-origin: 50% 50%; background-image: linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('/assets/hof-bergmann-map.png'); background-size: 200% 200%; background-position: center; background-repeat: no-repeat; will-change: transform; }
   .map-object { position: absolute; z-index: 2; transform: translate(-50%,-50%); }
+  .live-map-world .map-object { transform: translate(-50%,-50%) scale(var(--marker-scale,1)); }
   .map-field { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 2px solid rgba(236,232,222,.45); background: rgba(35,33,32,.78); color: #fff; font: 700 12px/1 'Barlow Semi Condensed',sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
   .map-field.owned { border-color: var(--lime); background: rgba(46,94,58,.88); }
   .map-vehicle { z-index: 4; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: #14202a; background: var(--sky); border: 2px solid #dcebf3; box-shadow: 0 3px 12px rgba(0,0,0,.55); }
@@ -61,6 +63,9 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
   .map-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
   .map-empty { position: absolute; inset: 0; z-index: 7; display: grid; place-items: center; padding: 30px; text-align: center; background: rgba(20,22,19,.68); color: var(--muted); }
+  .map-zoom { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 6px; }
+  .map-zoom button { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(24,24,22,.9); color: #fff; font-size: 20px; font-weight: 700; box-shadow: 0 3px 10px rgba(0,0,0,.35); cursor: pointer; }
+  .map-zoom button:hover { background: rgba(55,113,74,.95); }
   @media (max-width: 640px) { .live-map-card { min-height: 340px; aspect-ratio: auto; } .map-player span { display: none; } }
   .bed { padding: 10px; border-radius: 10px;
     background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(135deg, #3b3a2c 0%, #2c3229 55%, #35332a 100%);
@@ -231,7 +236,10 @@ tailwind.config = { theme: { extend: { fontFamily: {
       <p id="map-sum" class="muted text-sm mt-1 mb-3"></p>
       <div class="mb-4">
         <div class="flex items-center justify-between gap-3 mb-2"><h3 class="font-display font-semibold" data-i18n="liveMapTitle"></h3><span id="liveMapStatus" class="muted text-xs"></span></div>
-        <div id="liveMap" class="live-map-card" aria-live="polite"></div>
+        <div id="liveMap" class="live-map-card" aria-live="polite">
+          <div id="liveMapWorld" class="live-map-world"></div>
+          <div class="map-zoom" aria-label="Kartenzoom"><button type="button" id="mapZoomIn" title="Vergrößern">+</button><button type="button" id="mapZoomOut" title="Verkleinern">−</button><button type="button" id="mapZoomReset" title="Ansicht zurücksetzen" style="font-size:14px">1:1</button></div>
+        </div>
         <div class="map-legend"><span><i style="background:var(--gold)"></i><span data-i18n="playersLegend"></span></span><span><i style="background:var(--sky)"></i><span data-i18n="vehiclesLegend"></span></span><span><i style="background:var(--lime)"></i><span data-i18n="fieldsLegend"></span></span></div>
       </div>
       <div id="filters" class="flex flex-wrap gap-2 mb-3" role="group" data-i18n-aria="filterAria"></div>
@@ -481,6 +489,7 @@ let fields = [];
 let machines = [];
 let gamePlayers = [];
 let liveMapBounds = { minX: -1024, maxX: 1024, minZ: -1024, maxZ: 1024 };
+let liveMapZoom = 1, liveMapPanX = 0, liveMapPanY = 0;
 const STATUS_DOT = { working: 'var(--lime)', hauling: 'var(--sky)', idle: 'var(--muted)' };
 let players = [];
 const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', 'p_mow', 'p_bale', 'p_haul'];
@@ -516,19 +525,27 @@ function mapPosition(x, z) {
   if (![minX,maxX,minZ,maxZ].every(Number.isFinite) || maxX <= minX || maxZ <= minZ) return null;
   return {
     left: Math.max(1.5, Math.min(98.5, (x - minX) / (maxX - minX) * 100)),
-    top: Math.max(1.5, Math.min(98.5, (maxZ - z) / (maxZ - minZ) * 100))
+    top: Math.max(1.5, Math.min(98.5, (z - minZ) / (maxZ - minZ) * 100))
   };
 }
 
+function updateLiveMapTransform() {
+  const world = $('liveMapWorld');
+  if (!world) return;
+  world.style.transform = `translate(${liveMapPanX}px,${liveMapPanY}px) scale(${liveMapZoom})`;
+  world.style.setProperty('--marker-scale', String(Math.pow(liveMapZoom, -1.28)));
+}
+
 function renderLiveMap() {
-  const map = $('liveMap');
-  if (!map) return;
+  const world = $('liveMapWorld');
+  if (!world) return;
   const positionedFields = fields.filter(f => mapPosition(f.x, f.z));
   const positionedMachines = machines.filter(m => mapPosition(m.x, m.z));
   const positionedPlayers = gamePlayers.filter(p => mapPosition(p.x, p.z));
   $('liveMapStatus').textContent = t('liveMapCount', { p: gamePlayers.length, v: machines.length });
   if (!positionedFields.length && !positionedMachines.length && !positionedPlayers.length) {
-    map.innerHTML = `<div class="map-empty">${t('liveMapEmpty')}</div>`;
+    world.innerHTML = `<div class="map-empty">${t('liveMapEmpty')}</div>`;
+    updateLiveMapTransform();
     return;
   }
   const fieldMarkers = positionedFields.map(f => {
@@ -548,7 +565,8 @@ function renderLiveMap() {
     const initial = String(player.name || '?').trim().charAt(0).toUpperCase() || '?';
     return `<span class="map-object map-player" style="left:${p.left}%;top:${p.top}%" title="${esc(player.name + ' · ' + detail)}"><b class="map-player-avatar">${esc(initial)}</b><span>${esc(player.name)}<small>${esc(detail)}</small></span></span>`;
   }).join('');
-  map.innerHTML = fieldMarkers + vehicleMarkers + playerMarkers;
+  world.innerHTML = fieldMarkers + vehicleMarkers + playerMarkers;
+  updateLiveMapTransform();
 }
 
 function cardHTML(f) {
@@ -775,6 +793,31 @@ $('filters').addEventListener('click', e => {
 $('tog').addEventListener('click', () => {
   showUnowned = !showUnowned; $('tog').setAttribute('aria-checked', String(showUnowned)); renderFilters(); renderMap();
 });
+function setLiveMapZoom(value) {
+  liveMapZoom = Math.max(1, Math.min(5, Number(value) || 1));
+  if (liveMapZoom === 1) liveMapPanX = liveMapPanY = 0;
+  updateLiveMapTransform();
+}
+$('mapZoomIn').addEventListener('click', () => setLiveMapZoom(liveMapZoom + .5));
+$('mapZoomOut').addEventListener('click', () => setLiveMapZoom(liveMapZoom - .5));
+$('mapZoomReset').addEventListener('click', () => { liveMapPanX = liveMapPanY = 0; setLiveMapZoom(1); });
+$('liveMap').addEventListener('wheel', e => { e.preventDefault(); setLiveMapZoom(liveMapZoom + (e.deltaY < 0 ? .35 : -.35)); }, { passive: false });
+let liveMapDrag = null;
+$('liveMap').addEventListener('pointerdown', e => {
+  if (e.target.closest('button')) return;
+  liveMapDrag = { x: e.clientX, y: e.clientY, panX: liveMapPanX, panY: liveMapPanY };
+  $('liveMap').classList.add('dragging');
+  $('liveMap').setPointerCapture(e.pointerId);
+});
+$('liveMap').addEventListener('pointermove', e => {
+  if (!liveMapDrag) return;
+  liveMapPanX = liveMapDrag.panX + e.clientX - liveMapDrag.x;
+  liveMapPanY = liveMapDrag.panY + e.clientY - liveMapDrag.y;
+  updateLiveMapTransform();
+});
+const stopLiveMapDrag = () => { liveMapDrag = null; $('liveMap').classList.remove('dragging'); };
+$('liveMap').addEventListener('pointerup', stopLiveMapDrag);
+$('liveMap').addEventListener('pointercancel', stopLiveMapDrag);
 function bindHighlight(el) {
   const set = (e, on) => { const r = e.target.closest('[data-field]'); if (!r) return; const c = document.querySelector(`.fcard[data-n="${r.dataset.field}"]`); if (c) c.classList.toggle('hl', on); };
   ['mouseover', 'focusin'].forEach(ev => el.addEventListener(ev, e => set(e, true)));
