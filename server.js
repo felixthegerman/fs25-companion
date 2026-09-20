@@ -413,7 +413,7 @@ app.post('/api/telemetry/ingest', async (req, res) => {
     const { data: source, error } = await supabase.from('telemetry_sources').select('id').eq('token_hash', sha256(token)).maybeSingle();
     if (error || !source) return res.status(401).json({ error: 'Telemetrie-Token ist ungültig.' });
     const payload = req.body;
-    if (!payload || payload.schemaVersion !== 1 || !Array.isArray(payload.fields) || !Array.isArray(payload.vehicles)) {
+    if (!payload || ![1, 2, 3].includes(payload.schemaVersion) || !Array.isArray(payload.fields) || !Array.isArray(payload.vehicles)) {
         return res.status(400).json({ error: 'Ungültiges Telemetrieformat.' });
     }
     const now = new Date().toISOString();

@@ -47,6 +47,21 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .switch[aria-checked="true"] .knob { transform: translateX(20px); background: #F1F6EC; }
 
   /* Map */
+  .live-map-card { position: relative; min-height: 430px; aspect-ratio: 16/9; overflow: hidden; border: 1px solid var(--line); border-radius: 11px;
+    background-color: #263528; background-image: linear-gradient(rgba(12,18,13,.13),rgba(12,18,13,.32)), url('/assets/map-background.svg'); background-size: cover; background-position: center; }
+  .live-map-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 70px rgba(0,0,0,.36); }
+  .map-object { position: absolute; z-index: 2; transform: translate(-50%,-50%); }
+  .map-field { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 2px solid rgba(236,232,222,.45); background: rgba(35,33,32,.78); color: #fff; font: 700 12px/1 'Barlow Semi Condensed',sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .map-field.owned { border-color: var(--lime); background: rgba(46,94,58,.88); }
+  .map-vehicle { z-index: 4; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: #14202a; background: var(--sky); border: 2px solid #dcebf3; box-shadow: 0 3px 12px rgba(0,0,0,.55); }
+  .map-player { z-index: 6; display: flex; align-items: center; gap: 6px; min-width: max-content; padding: 4px 8px 4px 5px; border-radius: 999px; background: rgba(20,20,18,.92); border: 2px solid var(--gold); box-shadow: 0 4px 15px rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 700; }
+  .map-player-avatar { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); color: #201b12; font-size: 11px; }
+  .map-player small { display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 10px; font-weight: 500; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 9px 2px 15px; color: var(--muted); font-size: 12px; }
+  .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .map-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .map-empty { position: absolute; inset: 0; z-index: 7; display: grid; place-items: center; padding: 30px; text-align: center; background: rgba(20,22,19,.68); color: var(--muted); }
+  @media (max-width: 640px) { .live-map-card { min-height: 340px; aspect-ratio: auto; } .map-player span { display: none; } }
   .bed { padding: 10px; border-radius: 10px;
     background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(135deg, #3b3a2c 0%, #2c3229 55%, #35332a 100%);
     background-size: 22px 22px, 22px 22px, auto; }
@@ -214,6 +229,11 @@ tailwind.config = { theme: { extend: { fontFamily: {
         </div>
       </div>
       <p id="map-sum" class="muted text-sm mt-1 mb-3"></p>
+      <div class="mb-4">
+        <div class="flex items-center justify-between gap-3 mb-2"><h3 class="font-display font-semibold" data-i18n="liveMapTitle"></h3><span id="liveMapStatus" class="muted text-xs"></span></div>
+        <div id="liveMap" class="live-map-card" aria-live="polite"></div>
+        <div class="map-legend"><span><i style="background:var(--gold)"></i><span data-i18n="playersLegend"></span></span><span><i style="background:var(--sky)"></i><span data-i18n="vehiclesLegend"></span></span><span><i style="background:var(--lime)"></i><span data-i18n="fieldsLegend"></span></span></div>
+      </div>
       <div id="filters" class="flex flex-wrap gap-2 mb-3" role="group" data-i18n-aria="filterAria"></div>
       <div class="bed"><div id="fields" class="grid-fields"></div></div>
     </section>
@@ -300,7 +320,8 @@ const i18n = {
     sub: 'FS25 telemetry is not connected yet.',
     balance: 'Farm balance', income: 'Income this week', maint: 'Maintenance costs', net: 'Net this week',
     chartCap: 'Daily income and maintenance, days 8 to 14', chartAria: 'Bar chart of daily income and maintenance costs',
-    mapTitle: 'Field map', showUnowned: 'Show Unowned Fields', filterAria: 'Filter fields by growth stage', allFields: 'All fields',
+    mapTitle: 'Field map', liveMapTitle: 'Live map', playersLegend: 'Players', vehiclesLegend: 'Vehicles', fieldsLegend: 'Field IDs', liveMapEmpty: 'Waiting for live position data from FS25 …', liveMapCount: '{p} players · {v} vehicles',
+    showUnowned: 'Show Unowned Fields', filterAria: 'Filter fields by growth stage', allFields: 'All fields',
     mapSum: '{owned} owned fields, {ha} ha, {ready} ready to harvest', mapSale: ', {n} for sale',
     forSale: 'For sale', onRequest: 'On request', noActivity: 'No activity', wip: 'Work in progress', fieldN: 'Field {n}', yard: 'Farmyard',
     st_fallow: 'Fallow', st_plowed: 'Cultivated', st_sown: 'Seedbed', st_growing: 'Growing', st_ready: 'Ready to harvest',
@@ -336,7 +357,8 @@ const i18n = {
     sub: 'Die FS25-Telemetrie ist noch nicht verbunden.',
     balance: 'Kontostand', income: 'Einnahmen diese Woche', maint: 'Wartungskosten', net: 'Ergebnis diese Woche',
     chartCap: 'Tägliche Einnahmen und Wartung, Tag 8 bis 14', chartAria: 'Balkendiagramm der täglichen Einnahmen und Wartungskosten',
-    mapTitle: 'Feldkarte', showUnowned: 'Nicht erworbene Felder anzeigen', filterAria: 'Felder nach Wachstumsstufe filtern', allFields: 'Alle Felder',
+    mapTitle: 'Feldkarte', liveMapTitle: 'Live-Karte', playersLegend: 'Spieler', vehiclesLegend: 'Fahrzeuge', fieldsLegend: 'Feld-IDs', liveMapEmpty: 'Warte auf Live-Positionsdaten aus FS25 …', liveMapCount: '{p} Spieler · {v} Fahrzeuge',
+    showUnowned: 'Nicht erworbene Felder anzeigen', filterAria: 'Felder nach Wachstumsstufe filtern', allFields: 'Alle Felder',
     mapSum: '{owned} eigene Felder, {ha} ha, {ready} erntereif', mapSale: ', {n} zum Verkauf',
     forSale: 'Zu verkaufen', onRequest: 'Auf Anfrage', noActivity: 'Keine Aktivität', wip: 'Arbeit läuft', fieldN: 'Feld {n}', yard: 'Hof',
     st_fallow: 'Brache', st_plowed: 'Bearbeitet', st_sown: 'Saatbett', st_growing: 'Wachsend', st_ready: 'Erntereif',
@@ -457,6 +479,8 @@ const stageColor = { fallow: '#B9A97F', plowed: '#D19563', sown: '#E0CB6E', grow
 const stageLabel = k => (i18n[lang]['st_' + k] ?? i18n.en['st_' + k]) || prettify(k);
 let fields = [];
 let machines = [];
+let gamePlayers = [];
+let liveMapBounds = { minX: -1024, maxX: 1024, minZ: -1024, maxZ: 1024 };
 const STATUS_DOT = { working: 'var(--lime)', hauling: 'var(--sky)', idle: 'var(--muted)' };
 let players = [];
 const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', 'p_mow', 'p_bale', 'p_haul'];
@@ -485,6 +509,48 @@ function renderPlayers() {
   </span>`).join('');
 }
 
+function mapPosition(x, z) {
+  x = Number(x); z = Number(z);
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  const b = liveMapBounds || {}, minX = Number(b.minX), maxX = Number(b.maxX), minZ = Number(b.minZ), maxZ = Number(b.maxZ);
+  if (![minX,maxX,minZ,maxZ].every(Number.isFinite) || maxX <= minX || maxZ <= minZ) return null;
+  return {
+    left: Math.max(1.5, Math.min(98.5, (x - minX) / (maxX - minX) * 100)),
+    top: Math.max(1.5, Math.min(98.5, (maxZ - z) / (maxZ - minZ) * 100))
+  };
+}
+
+function renderLiveMap() {
+  const map = $('liveMap');
+  if (!map) return;
+  const positionedFields = fields.filter(f => mapPosition(f.x, f.z));
+  const positionedMachines = machines.filter(m => mapPosition(m.x, m.z));
+  const positionedPlayers = gamePlayers.filter(p => mapPosition(p.x, p.z));
+  $('liveMapStatus').textContent = t('liveMapCount', { p: gamePlayers.length, v: machines.length });
+  if (!positionedFields.length && !positionedMachines.length && !positionedPlayers.length) {
+    map.innerHTML = `<div class="map-empty">${t('liveMapEmpty')}</div>`;
+    return;
+  }
+  const fieldMarkers = positionedFields.map(f => {
+    const p = mapPosition(f.x, f.z);
+    return `<button type="button" class="map-object map-field ${f.owned ? 'owned' : ''}" data-field="${f.n}" style="left:${p.left}%;top:${p.top}%" title="${esc(t('fieldN',{n:f.n}) + ' · ' + cropName(f.crop))}">${f.n}</button>`;
+  }).join('');
+  const vehicleMarkers = positionedMachines.map(m => {
+    const p = mapPosition(m.x, m.z);
+    const detail = `${m.name}${m.field ? ' · ' + t('fieldN',{n:m.field}) : ''}`;
+    return `<span class="map-object map-vehicle" style="left:${p.left}%;top:${p.top}%" title="${esc(detail)}">${svg(ui.tractor,16)}</span>`;
+  }).join('');
+  const playerMarkers = positionedPlayers.map(player => {
+    const p = mapPosition(player.x, player.z);
+    const linkedVehicle = player.vehicleName || machines.find(m => m.op && String(m.op).toLowerCase() === String(player.name).toLowerCase())?.name || '';
+    const field = player.fieldNumber || machines.find(m => m.name === linkedVehicle)?.field;
+    const detail = [linkedVehicle, field ? t('fieldN',{n:field}) : ''].filter(Boolean).join(' · ') || t('yard');
+    const initial = String(player.name || '?').trim().charAt(0).toUpperCase() || '?';
+    return `<span class="map-object map-player" style="left:${p.left}%;top:${p.top}%" title="${esc(player.name + ' · ' + detail)}"><b class="map-player-avatar">${esc(initial)}</b><span>${esc(player.name)}<small>${esc(detail)}</small></span></span>`;
+  }).join('');
+  map.innerHTML = fieldMarkers + vehicleMarkers + playerMarkers;
+}
+
 function cardHTML(f) {
   const color = stageColor[f.stage] || '#B9A97F';
   const dim = activeStage !== 'all' && activeStage !== f.stage ? ' dim' : '';
@@ -502,6 +568,7 @@ function cardHTML(f) {
 }
 
 function renderMap() {
+  renderLiveMap();
   if (!fields.length) {
     $('fieldControls').hidden = true;
     $('map-sum').textContent = t('telemetryEmpty');
@@ -605,13 +672,20 @@ async function loadTelemetry() {
     fields = (payload.fields || []).map(f => ({
       n: Number(f.number ?? f.farmlandId ?? f.id), crop: String(f.crop || 'UNKNOWN').toUpperCase(),
       ha: Number(f.areaHa) || 0, owned: f.owned === true, stage: f.stage || 'fallow',
-      pct: Number(f.progress) || 0, eta: Number(f.etaDays) || 0, price: f.price == null ? null : Number(f.price)
+      pct: Number(f.progress) || 0, eta: Number(f.etaDays) || 0, price: f.price == null ? null : Number(f.price),
+      x: f.x == null ? null : Number(f.x), z: f.z == null ? null : Number(f.z)
     })).filter(f => Number.isFinite(f.n));
     machines = (payload.vehicles || []).map(v => ({
       id: v.id, name: v.name || 'Fahrzeug', type: v.type || 'Fahrzeug', kind: v.kind || 'tractor',
       field: v.fieldNumber == null ? null : Number(v.fieldNumber), status: v.status || 'idle',
-      task: v.task || (v.status === 'working' ? 'Arbeitet' : 'Geparkt'), op: v.operator || null
+      task: v.task || (v.status === 'working' ? 'Arbeitet' : 'Geparkt'), op: v.operator || null,
+      x: v.x == null ? null : Number(v.x), z: v.z == null ? null : Number(v.z)
     }));
+    gamePlayers = (payload.players || []).map(p => ({
+      id: p.id, name: p.name || p.nickname || 'Spieler', x: p.x == null ? null : Number(p.x), z: p.z == null ? null : Number(p.z),
+      fieldNumber: p.fieldNumber == null ? null : Number(p.fieldNumber), vehicleName: p.vehicleName || null, vehicleId: p.vehicleId || null
+    }));
+    if (payload.mapBounds) liveMapBounds = payload.mapBounds;
     if (payload.savegame?.name || payload.savegame?.mapName) $('farmTitle').textContent = payload.savegame.name || payload.savegame.mapName;
     $('farmSub').textContent = `${payload.savegame?.mapName || 'FS25'} · ${data.connected ? 'Live verbunden' : 'Telemetrie zuletzt empfangen'}${data.last_seen_at ? ` · ${new Date(data.last_seen_at).toLocaleString(loc())}` : ''}`;
     renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm();

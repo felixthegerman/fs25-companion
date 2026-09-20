@@ -139,7 +139,7 @@ Die Integration besteht aus dem Ingame-Mod `FS25_CompanionTelemetry.zip` und der
 3. Den Mod beim Laden des gewünschten Spielstands aktivieren.
 4. Im Website-Adminbereich **Kopplungscode erzeugen** anklicken.
 5. Die Telemetrie-Bridge entpacken und `Bridge starten.bat` öffnen.
-6. Website-Adresse und achtstelligen Code eingeben. Das Bridge-Fenster während des Spiels geöffnet lassen.
+6. Den achtstelligen Code eingeben. Die Bridge verwendet automatisch `https://fs25-companion.onrender.com`. Das Bridge-Fenster während des Spiels geöffnet lassen.
 
 Nur der Host beziehungsweise Dedicated Server exportiert Daten. Multiplayer-Clients erzeugen keine konkurrierenden Telemetriedateien. Auf der Website aktualisieren sich Dashboard und Finanzen danach automatisch über die bestehende Live-Verbindung.
 
