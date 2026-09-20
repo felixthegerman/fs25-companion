@@ -78,6 +78,20 @@ alter table public.website_sessions alter column sess set not null;
 alter table public.website_sessions alter column expires_at set not null;
 create index if not exists website_sessions_expires_idx on public.website_sessions(expires_at);
 
+create table if not exists public.telemetry_sources (
+  id uuid primary key default gen_random_uuid(),
+  source_name text not null default 'FS25 Spielstand',
+  device_id text,
+  pairing_code_hash text unique,
+  pairing_expires_at timestamptz,
+  token_hash text unique,
+  paired_at timestamptz,
+  last_seen_at timestamptz,
+  last_payload jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists telemetry_sources_seen_idx on public.telemetry_sources(last_seen_at desc);
+
 -- ---------------------------------------------------------------------------
 -- Shared task board
 -- Canonical columns match the tasks table already present in this project.
@@ -214,10 +228,12 @@ create index if not exists finance_transactions_occurred_idx
 -- uses the Supabase server-side secret key and therefore bypasses RLS.
 alter table public.discord_users enable row level security;
 alter table public.website_sessions enable row level security;
+alter table public.telemetry_sources enable row level security;
 alter table public.tasks enable row level security;
 alter table public.finance_transactions enable row level security;
 revoke all on table public.discord_users from anon, authenticated;
 revoke all on table public.website_sessions from anon, authenticated;
+revoke all on table public.telemetry_sources from anon, authenticated;
 revoke all on table public.tasks from anon, authenticated;
 revoke all on table public.finance_transactions from anon, authenticated;
 

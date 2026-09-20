@@ -199,8 +199,8 @@ tailwind.config = { theme: { extend: { fontFamily: {
 <div id="dashboardRoot" class="mx-auto max-w-[1400px] px-4 sm:px-6 py-6">
 
   <div class="mb-5">
-    <h1 class="font-display text-3xl sm:text-4xl font-bold tracking-tight">FS25 Farm-Dashboard</h1>
-    <p class="muted mt-1 text-sm" data-i18n="sub"></p>
+    <h1 id="farmTitle" class="font-display text-3xl sm:text-4xl font-bold tracking-tight">FS25 Farm-Dashboard</h1>
+    <p id="farmSub" class="muted mt-1 text-sm" data-i18n="sub"></p>
   </div>
 
   <!-- Map + sidebar -->
@@ -455,8 +455,8 @@ const uiSvg = (k, s = 14) => svg(ui[k], s).replace('stroke-width="1.5"', 'stroke
 const STAGE_ORDER = ['fallow', 'plowed', 'sown', 'growing', 'ready'];
 const stageColor = { fallow: '#B9A97F', plowed: '#D19563', sown: '#E0CB6E', growing: '#9BD46A', ready: '#F2B33D' };
 const stageLabel = k => (i18n[lang]['st_' + k] ?? i18n.en['st_' + k]) || prettify(k);
-const fields = [];
-const machines = [];
+let fields = [];
+let machines = [];
 const STATUS_DOT = { working: 'var(--lime)', hauling: 'var(--sky)', idle: 'var(--muted)' };
 let players = [];
 const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', 'p_mow', 'p_bale', 'p_haul'];
@@ -595,6 +595,27 @@ async function loadTasks() {
   } catch (error) {
     $('fErr').textContent = error.message;
   }
+}
+
+async function loadTelemetry() {
+  try {
+    const data = await apiRequest('/api/telemetry/state');
+    const payload = data.payload;
+    if (!payload) return;
+    fields = (payload.fields || []).map(f => ({
+      n: Number(f.number ?? f.farmlandId ?? f.id), crop: String(f.crop || 'UNKNOWN').toUpperCase(),
+      ha: Number(f.areaHa) || 0, owned: f.owned === true, stage: f.stage || 'fallow',
+      pct: Number(f.progress) || 0, eta: Number(f.etaDays) || 0, price: f.price == null ? null : Number(f.price)
+    })).filter(f => Number.isFinite(f.n));
+    machines = (payload.vehicles || []).map(v => ({
+      id: v.id, name: v.name || 'Fahrzeug', type: v.type || 'Fahrzeug', kind: v.kind || 'tractor',
+      field: v.fieldNumber == null ? null : Number(v.fieldNumber), status: v.status || 'idle',
+      task: v.task || (v.status === 'working' ? 'Arbeitet' : 'Geparkt'), op: v.operator || null
+    }));
+    if (payload.savegame?.name || payload.savegame?.mapName) $('farmTitle').textContent = payload.savegame.name || payload.savegame.mapName;
+    $('farmSub').textContent = `${payload.savegame?.mapName || 'FS25'} · ${data.connected ? 'Live verbunden' : 'Telemetrie zuletzt empfangen'}${data.last_seen_at ? ` · ${new Date(data.last_seen_at).toLocaleString(loc())}` : ''}`;
+    renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm();
+  } catch (error) { console.warn('Telemetrie konnte nicht geladen werden:', error.message); }
 }
 
 function renderForm() {
@@ -754,6 +775,7 @@ applyLang();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;
     loadTasks();
+    loadTelemetry();
     startPresence();
     startRealtime();
   }
@@ -789,6 +811,7 @@ applyLang();
     eventStream = new EventSource('/api/events');
     eventStream.addEventListener('tasks-changed', () => loadTasks());
     eventStream.addEventListener('presence-changed', () => loadOnlineUsers());
+    eventStream.addEventListener('telemetry-changed', () => loadTelemetry());
     eventStream.onerror = () => console.warn('Live-Verbindung wird automatisch neu aufgebaut.');
     taskSyncTimer = window.setInterval(loadTasks, 15000);
   }

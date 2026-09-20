@@ -130,6 +130,19 @@ Führe nach diesem Update ausschließlich `supabase/schema.sql` vollständig im 
 
 Das SQL-Skript legt außerdem `website_sessions` an. Dadurch bleibt die Discord-Anmeldung bei einem Seiten-Refresh sowie nach einem Server-Neustart oder neuen Deployment bestehen. Die Sitzung läuft nach sieben Tagen ab oder wird durch **Abmelden** sofort gelöscht.
 
+## FS25-Live-Telemetrie einrichten
+
+Die Integration besteht aus dem Ingame-Mod `FS25_CompanionTelemetry.zip` und der lokalen Telemetrie-Bridge. FS25-Mods können aus der Lua-Sandbox keine beliebigen sicheren POST-Anfragen an externe Websites senden. Der Mod exportiert deshalb alle zehn Sekunden Felder, Frucht und Wachstumsstand, eigene Fahrzeuge, deren Status, Farmkonto und Finanzereignisse lokal. Die Bridge überträgt diese Datei mit einem eigenen, widerrufbaren Token an die Website.
+
+1. Diese Website-Version deployen und `supabase/schema.sql` ausführen.
+2. `FS25_CompanionTelemetry.zip` unverändert in `Documents/My Games/FarmingSimulator2025/mods` kopieren.
+3. Den Mod beim Laden des gewünschten Spielstands aktivieren.
+4. Im Website-Adminbereich **Kopplungscode erzeugen** anklicken.
+5. Die Telemetrie-Bridge entpacken und `Bridge starten.bat` öffnen.
+6. Website-Adresse und achtstelligen Code eingeben. Das Bridge-Fenster während des Spiels geöffnet lassen.
+
+Nur der Host beziehungsweise Dedicated Server exportiert Daten. Multiplayer-Clients erzeugen keine konkurrierenden Telemetriedateien. Auf der Website aktualisieren sich Dashboard und Finanzen danach automatisch über die bestehende Live-Verbindung.
+
 ## Sicherheitsdetails
 
 - `DISCORD_CLIENT_SECRET` bleibt auf dem Server.

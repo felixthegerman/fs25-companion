@@ -108,7 +108,7 @@ const sessionStore = new SupabaseSessionStore(supabase);
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(session({
     name: 'fs25.sid',
     store: sessionStore,
@@ -195,6 +195,8 @@ function broadcast(event, data = {}) {
         try { client.write(message); } catch { realtimeClients.delete(client); }
     }
 }
+
+const sha256 = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 function redirectWithError(res, error) {
     res.redirect(`/?error=${encodeURIComponent(error)}`);
@@ -369,6 +371,74 @@ app.get('/api/events', requireApprovedPermission(), (req, res) => {
         clearInterval(keepAlive);
         realtimeClients.delete(res);
     });
+});
+
+app.post('/api/admin/telemetry/pairing-code', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    const code = String(crypto.randomInt(10000000, 100000000));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const { data, error } = await supabase.from('telemetry_sources').insert({
+        source_name: String(req.body?.name || 'FS25 Spielstand').slice(0, 80),
+        pairing_code_hash: sha256(code), pairing_expires_at: expiresAt,
+    }).select('id').single();
+    if (error) return res.status(500).json({ error: 'Kopplungscode konnte nicht erstellt werden.' });
+    res.json({ code, expires_at: expiresAt, source_id: data.id });
+});
+
+app.get('/api/telemetry/status', requireApprovedPermission(), async (req, res) => {
+    const { data, error } = await supabase.from('telemetry_sources')
+        .select('id,source_name,paired_at,last_seen_at').not('paired_at', 'is', null)
+        .order('last_seen_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+    if (error) return res.status(500).json({ error: 'Telemetriestatus konnte nicht geladen werden.' });
+    res.json({ source: data || null, connected: Boolean(data?.last_seen_at && Date.now() - new Date(data.last_seen_at).getTime() < 90000) });
+});
+
+app.post('/api/telemetry/pair', async (req, res) => {
+    const code = String(req.body?.code || '').trim();
+    if (!/^\d{8}$/.test(code)) return res.status(400).json({ error: 'Ungültiger Kopplungscode.' });
+    const { data: source, error } = await supabase.from('telemetry_sources').select('id,pairing_expires_at')
+        .eq('pairing_code_hash', sha256(code)).gt('pairing_expires_at', new Date().toISOString()).maybeSingle();
+    if (error || !source) return res.status(400).json({ error: 'Kopplungscode ist ungültig oder abgelaufen.' });
+    const token = crypto.randomBytes(32).toString('base64url');
+    const { error: updateError } = await supabase.from('telemetry_sources').update({
+        token_hash: sha256(token), pairing_code_hash: null, pairing_expires_at: null,
+        paired_at: new Date().toISOString(), device_id: String(req.body?.device_id || '').slice(0, 120),
+    }).eq('id', source.id);
+    if (updateError) return res.status(500).json({ error: 'Kopplung konnte nicht gespeichert werden.' });
+    res.json({ token, source_id: source.id });
+});
+
+app.post('/api/telemetry/ingest', async (req, res) => {
+    const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token) return res.status(401).json({ error: 'Telemetrie-Token fehlt.' });
+    const { data: source, error } = await supabase.from('telemetry_sources').select('id').eq('token_hash', sha256(token)).maybeSingle();
+    if (error || !source) return res.status(401).json({ error: 'Telemetrie-Token ist ungültig.' });
+    const payload = req.body;
+    if (!payload || payload.schemaVersion !== 1 || !Array.isArray(payload.fields) || !Array.isArray(payload.vehicles)) {
+        return res.status(400).json({ error: 'Ungültiges Telemetrieformat.' });
+    }
+    const now = new Date().toISOString();
+    const { error: saveError } = await supabase.from('telemetry_sources').update({ last_payload: payload, last_seen_at: now }).eq('id', source.id);
+    if (saveError) return res.status(500).json({ error: 'Telemetrie konnte nicht gespeichert werden.' });
+    const events = Array.isArray(payload.financeEvents) ? payload.financeEvents.slice(0, 100) : [];
+    if (events.length) {
+        const rows = events.filter((e) => e?.id && Number.isFinite(Number(e.amount))).map((e) => ({
+            external_id: `${source.id}:${String(e.id).slice(0, 160)}`, occurred_at: e.occurredAt || now,
+            category: String(e.category || 'other').slice(0, 50), description: String(e.description || 'FS25 Buchung').slice(0, 240),
+            amount: Number(e.amount), balance_after: e.balanceAfter == null ? null : Number(e.balanceAfter), currency: e.currency || 'USD',
+            metadata: { source_id: source.id },
+        }));
+        if (rows.length) await supabase.from('finance_transactions').upsert(rows, { onConflict: 'external_id', ignoreDuplicates: true });
+    }
+    broadcast('telemetry-changed', { sourceId: source.id, receivedAt: now });
+    res.json({ success: true, received_at: now });
+});
+
+app.get('/api/telemetry/state', requireApprovedPermission(), async (req, res) => {
+    const { data, error } = await supabase.from('telemetry_sources').select('source_name,last_seen_at,last_payload')
+        .not('last_payload', 'is', null).order('last_seen_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) return res.status(500).json({ error: 'Telemetriedaten konnten nicht geladen werden.' });
+    res.json({ payload: data?.last_payload || null, source_name: data?.source_name || null, last_seen_at: data?.last_seen_at || null,
+        connected: Boolean(data?.last_seen_at && Date.now() - new Date(data.last_seen_at).getTime() < 90000) });
 });
 
 app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async (req, res) => {
@@ -554,12 +624,13 @@ app.get('/api/finances/summary', requireApprovedPermission(), async (req, res) =
     const weekStart = new Date();
     weekStart.setUTCDate(weekStart.getUTCDate() - 7);
 
-    const [weekResult, latestResult] = await Promise.all([
+    const [weekResult, latestResult, telemetryResult] = await Promise.all([
         supabase.from('finance_transactions').select('amount').gte('occurred_at', weekStart.toISOString()),
         supabase.from('finance_transactions').select('balance_after,currency,occurred_at').order('occurred_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('telemetry_sources').select('last_payload,last_seen_at').not('last_payload', 'is', null).order('last_seen_at', { ascending: false }).limit(1).maybeSingle(),
     ]);
 
-    if (weekResult.error || latestResult.error) {
+    if (weekResult.error || latestResult.error || telemetryResult.error) {
         return res.status(500).json({ error: 'Finanzübersicht konnte nicht geladen werden.' });
     }
 
@@ -567,13 +638,13 @@ app.get('/api/finances/summary', requireApprovedPermission(), async (req, res) =
     const income = amounts.filter((amount) => amount > 0).reduce((sum, amount) => sum + amount, 0);
     const expenses = amounts.filter((amount) => amount < 0).reduce((sum, amount) => sum + Math.abs(amount), 0);
     res.json({
-        telemetry_connected: Boolean(latestResult.data),
-        balance: latestResult.data?.balance_after ?? null,
+        telemetry_connected: Boolean(telemetryResult.data),
+        balance: telemetryResult.data?.last_payload?.farm?.money ?? latestResult.data?.balance_after ?? null,
         income,
         expenses,
         net: income - expenses,
         currency: latestResult.data?.currency || 'USD',
-        updated_at: latestResult.data?.occurred_at || null,
+        updated_at: telemetryResult.data?.last_seen_at || latestResult.data?.occurred_at || null,
     });
 });
 

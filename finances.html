@@ -56,6 +56,7 @@
   <script>
     const CATEGORY = {vehicle_purchase:'Fahrzeugkauf',vehicle_sale:'Fahrzeugverkauf',refuel:'Auftanken',maintenance:'Wartung',crop_sale:'Ernteverkauf',land_purchase:'Feldkauf',loan:'Kredit',other:'Sonstiges'};
     let presenceTimer=null;
+    let eventStream=null;
     const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     async function api(url,options={}){const response=await fetch(url,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||'Die Anfrage ist fehlgeschlagen.');return data;}
     const currency=(value,code='USD')=>new Intl.NumberFormat('de-DE',{style:'currency',currency:code,maximumFractionDigits:2}).format(Number(value)||0);
@@ -77,6 +78,8 @@
     }
     async function updatePresence(){try{await api('/api/presence',{method:'POST'});}catch(error){console.warn(error.message);}}
     function startPresence(){if(presenceTimer)return;updatePresence();presenceTimer=window.setInterval(updatePresence,30000);}
+    async function loadFinances(){const [summary,ledger]=await Promise.all([api('/api/finances/summary'),api('/api/finances/transactions?limit=250')]);showSummary(summary);showTransactions(ledger.transactions||[]);}
+    function startRealtime(){if(eventStream)return;eventStream=new EventSource('/api/events');eventStream.addEventListener('telemetry-changed',()=>loadFinances().catch(error=>document.getElementById('error').textContent=error.message));}
     (async()=>{
       try{
         const auth=await api('/api/auth/me');
@@ -85,8 +88,8 @@
         document.getElementById('avatar').src=auth.user.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
         document.getElementById('adminLink').hidden=!auth.user.permissions?.can_manage_users;
         startPresence();
-        const [summary,ledger]=await Promise.all([api('/api/finances/summary'),api('/api/finances/transactions?limit=250')]);
-        showSummary(summary);showTransactions(ledger.transactions||[]);
+        startRealtime();
+        await loadFinances();
       }catch(error){document.getElementById('error').textContent=error.message;document.getElementById('transactions').innerHTML='<div class="empty">Finanzdaten konnten nicht geladen werden.</div>';}
     })();
   </script>
