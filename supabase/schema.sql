@@ -101,6 +101,7 @@ create table if not exists public.tasks (
   task_name text not null,
   player_name text not null default '',
   field_number integer,
+  task_type text not null default 'field',
   priority text not null default 'medium',
   is_completed boolean not null default false,
   created_by text references public.discord_users(discord_id) on delete set null,
@@ -111,6 +112,7 @@ create table if not exists public.tasks (
 alter table public.tasks add column if not exists task_name text;
 alter table public.tasks add column if not exists player_name text default '';
 alter table public.tasks add column if not exists field_number integer;
+alter table public.tasks add column if not exists task_type text default 'field';
 alter table public.tasks add column if not exists priority text default 'medium';
 alter table public.tasks add column if not exists is_completed boolean default false;
 alter table public.tasks add column if not exists created_by text;
@@ -161,6 +163,7 @@ set priority = case lower(coalesce(priority, 'medium'))
   else 'medium'
 end;
 update public.tasks set is_completed = false where is_completed is null;
+update public.tasks set task_type = 'field' where task_type is null or task_type not in ('field', 'animal', 'vehicle', 'transport', 'production', 'maintenance', 'other');
 update public.tasks set created_at = now() where created_at is null;
 update public.tasks set updated_at = coalesce(created_at, now()) where updated_at is null;
 
@@ -169,6 +172,8 @@ alter table public.tasks alter column player_name set default '';
 alter table public.tasks alter column player_name set not null;
 alter table public.tasks alter column priority set default 'medium';
 alter table public.tasks alter column priority set not null;
+alter table public.tasks alter column task_type set default 'field';
+alter table public.tasks alter column task_type set not null;
 alter table public.tasks alter column is_completed set default false;
 alter table public.tasks alter column is_completed set not null;
 alter table public.tasks alter column created_at set default now();
@@ -179,6 +184,31 @@ alter table public.tasks alter column updated_at set not null;
 alter table public.tasks drop constraint if exists tasks_priority_check;
 alter table public.tasks add constraint tasks_priority_check
   check (priority in ('low', 'medium', 'high'));
+alter table public.tasks drop constraint if exists tasks_type_check;
+alter table public.tasks add constraint tasks_type_check
+  check (task_type in ('field', 'animal', 'vehicle', 'transport', 'production', 'maintenance', 'other'));
+
+create table if not exists public.task_assignees (
+  task_id bigint not null references public.tasks(id) on delete cascade,
+  assignee_key text not null,
+  discord_id text references public.discord_users(discord_id) on delete set null,
+  display_name text not null,
+  is_claimed boolean not null default false,
+  assigned_at timestamptz not null default now(),
+  primary key (task_id, assignee_key)
+);
+alter table public.task_assignees add column if not exists discord_id text;
+alter table public.task_assignees add column if not exists display_name text;
+alter table public.task_assignees add column if not exists is_claimed boolean not null default false;
+alter table public.task_assignees add column if not exists assigned_at timestamptz not null default now();
+update public.task_assignees set display_name = 'Spieler' where display_name is null or btrim(display_name) = '';
+alter table public.task_assignees alter column display_name set not null;
+insert into public.task_assignees (task_id, assignee_key, display_name, is_claimed)
+select id, 'legacy:' || lower(regexp_replace(player_name, '[^a-zA-Z0-9]+', '-', 'g')), player_name, false
+from public.tasks
+where btrim(player_name) <> ''
+on conflict (task_id, assignee_key) do nothing;
+create index if not exists task_assignees_discord_idx on public.task_assignees(discord_id);
 
 -- Remove only the old built-in demo tasks. Real tasks created through the
 -- website always carry the creator's Discord ID and are left untouched.
@@ -230,11 +260,13 @@ alter table public.discord_users enable row level security;
 alter table public.website_sessions enable row level security;
 alter table public.telemetry_sources enable row level security;
 alter table public.tasks enable row level security;
+alter table public.task_assignees enable row level security;
 alter table public.finance_transactions enable row level security;
 revoke all on table public.discord_users from anon, authenticated;
 revoke all on table public.website_sessions from anon, authenticated;
 revoke all on table public.telemetry_sources from anon, authenticated;
 revoke all on table public.tasks from anon, authenticated;
+revoke all on table public.task_assignees from anon, authenticated;
 revoke all on table public.finance_transactions from anon, authenticated;
 
 commit;

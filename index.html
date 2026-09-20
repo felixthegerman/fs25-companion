@@ -128,6 +128,17 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .seg span { display: block; text-align: center; padding: 7px 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-size: 13px; color: var(--muted); }
   .seg input:checked + span { color: #1A1917; font-weight: 600; background: var(--c); border-color: var(--c); }
   .seg input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .assignee-picker { display:flex; flex-wrap:wrap; gap:6px; min-height:42px; padding:7px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); }
+  .assignee-choice { position:relative; }
+  .assignee-choice input { position:absolute; opacity:0; pointer-events:none; }
+  .assignee-choice span { display:inline-flex; align-items:center; gap:6px; padding:5px 9px; border:1px solid #49453f; border-radius:999px; color:var(--muted); font-size:12px; cursor:pointer; }
+  .assignee-choice input:checked + span { color:#182014; background:var(--lime); border-color:var(--lime); font-weight:700; }
+  .assignee-pill { display:inline-flex; align-items:center; gap:4px; margin:2px 3px 2px 0; padding:2px 7px; border-radius:999px; background:rgba(140,203,94,.14); color:var(--lime); font-size:11px; white-space:nowrap; }
+  .assignee-pill.claimed { background:rgba(242,179,61,.15); color:var(--gold); }
+  .task-type { display:inline-flex; margin-top:3px; padding:2px 7px; border-radius:999px; background:rgba(111,168,201,.14); color:var(--sky); font-size:11px; }
+  .task-actions { display:flex; align-items:center; justify-content:flex-end; gap:4px; }
+  .claim-btn { padding:5px 8px; border-radius:7px; border:1px solid var(--green-hi); color:var(--lime); font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .claim-btn.mine { border-color:#695b31; color:var(--gold); }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; border-radius: 8px; background: var(--green-hi); color: #F1F6EC; font-weight: 600; cursor: pointer; }
   .btn:hover { background: #418456; }
   .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 5px 12px; font-size: 13px; font-weight: 500; }
@@ -248,6 +259,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
           <div id="liveMapWorld" class="live-map-world"></div>
           <div id="liveMapMarkers" class="live-map-markers"></div>
           <aside id="fieldMapInfo" class="field-map-info" hidden></aside>
+          <aside id="vehicleMapInfo" class="field-map-info" hidden></aside>
           <div class="map-zoom" aria-label="Kartenzoom"><button type="button" id="mapZoomIn" title="Vergrößern">+</button><button type="button" id="mapZoomOut" title="Verkleinern">−</button><button type="button" id="mapZoomReset" title="Ansicht zurücksetzen" style="font-size:14px">1:1</button></div>
         </div>
         <div class="map-legend"><span><i style="background:var(--gold)"></i><span data-i18n="playersLegend"></span></span><span><i style="background:var(--sky)"></i><span data-i18n="vehiclesLegend"></span></span><span><i style="background:var(--lime)"></i><span data-i18n="fieldsLegend"></span></span></div>
@@ -287,8 +299,9 @@ tailwind.config = { theme: { extend: { fontFamily: {
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="lbl" for="fField" data-i18n="fField"></label><select id="fField" class="inp"></select></div>
-          <div><label class="lbl" for="fPlayer" data-i18n="fPlayer"></label><input id="fPlayer" class="inp" list="playerList" autocomplete="off" data-i18n-ph="phPlayer"><datalist id="playerList"></datalist></div>
+          <div><label class="lbl" for="fType" data-i18n="fType"></label><select id="fType" class="inp"></select></div>
         </div>
+        <div><span class="lbl" data-i18n="fPlayers"></span><div id="assigneePicker" class="assignee-picker"></div><p class="muted text-xs mt-1" data-i18n="playersHint"></p></div>
         <fieldset>
           <legend class="lbl" data-i18n="fUrgency"></legend>
           <div class="seg">
@@ -297,7 +310,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
             <label style="--c:var(--clay)"><input type="radio" name="urg" value="high"><span data-i18n="high"></span></label>
           </div>
         </fieldset>
-        <button type="submit" class="btn w-full"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="addTask"></span></button>
+        <div class="flex gap-2"><button type="submit" class="btn flex-1"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span id="taskSubmitLabel" data-i18n="addTask"></span></button><button id="cancelTaskEdit" type="button" class="btn ghost" hidden data-i18n="cancelEdit"></button></div>
       </form>
       </div>
 
@@ -306,7 +319,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
           <table class="tbl">
             <thead><tr>
               <th style="width:56px" data-i18n="colDone"></th><th data-i18n="colTask"></th><th data-i18n="colField"></th>
-              <th data-i18n="colPlayer"></th><th data-i18n="colUrgency"></th><th style="width:44px"><span class="sr-only" data-i18n="colActions"></span></th>
+              <th data-i18n="colPlayer"></th><th data-i18n="colUrgency"></th><th style="width:190px" data-i18n="colActions"></th>
             </tr></thead>
             <tbody id="taskBody"></tbody>
           </table>
@@ -353,10 +366,12 @@ const i18n = {
     ty_cult: 'Tractor with cultivator', ty_truck: 'Grain truck', ty_baler: 'Tractor with baler', ty_tractor: 'Tractor',
     k_plowing: 'Plowing', k_harvesting: 'Harvesting', k_sowing: 'Sowing', k_cultivating: 'Cultivating', k_hauling: 'Hauling grain to the silo', k_parked: 'Parked',
     tasksTitle: 'Farm operations & tasks board', tasksSub: 'Plan the work with your crew and tick jobs off as they get done.',
-    taskSum: '{o} open, {d} done', fTask: 'Task name', phTask: 'e.g. Plow field 4', fField: 'Field number', fPlayer: 'Assigned player', phPlayer: 'Player name',
+    taskSum: '{o} open, {d} done', fTask: 'Task name', phTask: 'e.g. Plow field 4', fField: 'Field number', fPlayer: 'Assigned player', phPlayer: 'Player name', fPlayers: 'People involved', playersHint: 'Multiple people can be selected.', fType: 'Task type',
     fUrgency: 'Urgency level', low: 'Low', medium: 'Medium', high: 'High', addTask: 'Add task', errTask: 'Enter a task name first.',
     colDone: 'Done', colTask: 'Task', colField: 'Field', colPlayer: 'Player', colUrgency: 'Urgency', colActions: 'Actions',
-    removeTask: 'Remove task', clearDone: 'Clear completed', noTasks: 'No tasks yet. Add the first one with the form.', unassigned: 'Unassigned',
+    removeTask: 'Remove task', editTask: 'Edit', cancelEdit: 'Cancel', saveTask: 'Save task', claimTask: 'Claim', unclaimTask: 'Release', clearDone: 'Clear completed', noTasks: 'No tasks yet. Add the first one with the form.', unassigned: 'Unassigned',
+    type_field: 'Field work', type_animal: 'Animals', type_vehicle: 'Vehicle', type_transport: 'Transport', type_production: 'Production', type_maintenance: 'Maintenance', type_other: 'Other',
+    vehicleModel: 'Model', vehicleType: 'Type', vehicleDamage: 'Damage', vehicleRuntime: 'Operating time', vehicleStatus: 'Status', hoursShort: '{n} h',
     noTaskCreatePermission: 'You may view and complete tasks, but you do not have permission to create them.',
     adminTitle: 'User administration', adminSub: 'Approve, reject or block website users and assign individual permissions.', adminReload: 'Reload',
     adminUser: 'User', adminStatus: 'Status', adminPermissions: 'Permissions', adminActions: 'Access actions',
@@ -391,10 +406,12 @@ const i18n = {
     ty_cult: 'Traktor mit Grubber', ty_truck: 'Getreide-LKW', ty_baler: 'Traktor mit Ballenpresse', ty_tractor: 'Traktor',
     k_plowing: 'Pflügen', k_harvesting: 'Ernten', k_sowing: 'Säen', k_cultivating: 'Grubbern', k_hauling: 'Getreide zum Silo transportieren', k_parked: 'Geparkt',
     tasksTitle: 'Betriebsaufgaben und Aufgabentafel', tasksSub: 'Plane die Arbeit mit deiner Crew und hake erledigte Aufgaben ab.',
-    taskSum: '{o} offen, {d} erledigt', fTask: 'Aufgabenname', phTask: 'z. B. Feld 4 pflügen', fField: 'Feldnummer', fPlayer: 'Zugewiesener Spieler', phPlayer: 'Spielername',
+    taskSum: '{o} offen, {d} erledigt', fTask: 'Aufgabenname', phTask: 'z. B. Feld 4 pflügen', fField: 'Feldnummer', fPlayer: 'Zugewiesener Spieler', phPlayer: 'Spielername', fPlayers: 'Beteiligte Personen', playersHint: 'Mehrere Personen können ausgewählt werden.', fType: 'Aufgabenart',
     fUrgency: 'Dringlichkeit', low: 'Niedrig', medium: 'Mittel', high: 'Hoch', addTask: 'Aufgabe hinzufügen', errTask: 'Bitte zuerst einen Aufgabennamen eingeben.',
     colDone: 'Erledigt', colTask: 'Aufgabe', colField: 'Feld', colPlayer: 'Spieler', colUrgency: 'Dringlichkeit', colActions: 'Aktionen',
-    removeTask: 'Aufgabe entfernen', clearDone: 'Erledigte entfernen', noTasks: 'Noch keine Aufgaben. Füge die erste mit dem Formular hinzu.', unassigned: 'Nicht zugewiesen',
+    removeTask: 'Aufgabe entfernen', editTask: 'Bearbeiten', cancelEdit: 'Abbrechen', saveTask: 'Aufgabe speichern', claimTask: 'Übernehmen', unclaimTask: 'Freigeben', clearDone: 'Erledigte entfernen', noTasks: 'Noch keine Aufgaben. Füge die erste mit dem Formular hinzu.', unassigned: 'Nicht zugewiesen',
+    type_field: 'Feldarbeit', type_animal: 'Tierbezogen', type_vehicle: 'Fahrzeug', type_transport: 'Transport', type_production: 'Produktion', type_maintenance: 'Wartung', type_other: 'Sonstiges',
+    vehicleModel: 'Modell', vehicleType: 'Typ', vehicleDamage: 'Schaden', vehicleRuntime: 'Laufzeit', vehicleStatus: 'Status', hoursShort: '{n} Std.',
     noTaskCreatePermission: 'Du darfst Aufgaben ansehen und abhaken, hast aber kein Recht, neue Aufgaben zu erstellen.',
     adminTitle: 'Benutzerverwaltung', adminSub: 'Website-Nutzer annehmen, ablehnen oder sperren und individuelle Rechte vergeben.', adminReload: 'Neu laden',
     adminUser: 'Benutzer', adminStatus: 'Status', adminPermissions: 'Berechtigungen', adminActions: 'Zugriff verwalten',
@@ -505,12 +522,15 @@ let liveMapZoom = 1, liveMapPanX = 0, liveMapPanY = 0;
 let selectedMapField = null, liveFarmName = '';
 const STATUS_DOT = { working: 'var(--lime)', hauling: 'var(--sky)', idle: 'var(--muted)' };
 let players = [];
+let assignableUsers = [];
 const PRESETS = ['p_plow', 'p_cultivate', 'p_sow', 'p_fertilize', 'p_harvest', 'p_mow', 'p_bale', 'p_haul'];
+const TASK_TYPES = ['field', 'animal', 'vehicle', 'transport', 'production', 'maintenance', 'other'];
 const URG_COLOR = { low: 'var(--sky)', medium: 'var(--gold)', high: 'var(--clay)' };
 const URG_RANK = { high: 0, medium: 1, low: 2 };
 
 let tasks = [];
 let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false };
+let currentUser = null, editingTaskId = null, selectedMapVehicle = null;
 
 /* =====================================================================
    4. RENDERING
@@ -547,7 +567,7 @@ function updateLiveMapTransform() {
   if (!map || !world || !markers) return;
   world.style.transform = `translate(${liveMapPanX}px,${liveMapPanY}px) scale(${liveMapZoom})`;
   const width = map.clientWidth, height = map.clientHeight;
-  const markerScale = Math.max(.38, Math.pow(liveMapZoom, -.48));
+  const markerScale = Math.min(1.65, .9 + (liveMapZoom - 1) * .16);
   markers.querySelectorAll('.map-object[data-map-x]').forEach(marker => {
     marker.style.left = `${liveMapPanX + Number(marker.dataset.mapX) / 100 * width * liveMapZoom}px`;
     marker.style.top = `${liveMapPanY + Number(marker.dataset.mapY) / 100 * height * liveMapZoom}px`;
@@ -559,9 +579,23 @@ function renderFieldMapInfo(fieldNumber) {
   const box = $('fieldMapInfo'), field = fields.find(f => Number(f.n) === Number(fieldNumber));
   if (!box || !field) { if (box) box.hidden = true; return; }
   selectedMapField = field.n;
+  selectedMapVehicle = null;
+  $('vehicleMapInfo').hidden = true;
   const owner = field.ownerName || (field.owned ? (liveFarmName || t('ownFarm')) : (field.ownerFarmId > 0 ? `${t('fieldOwner')} ${field.ownerFarmId}` : t('noOwner')));
   box.innerHTML = `<div class="flex items-center justify-between gap-3"><div><div class="muted text-xs">${t('liveMapTitle')}</div><div class="font-display text-xl font-bold">${t('fieldN',{n:field.n})}</div></div><button type="button" class="field-info-close" aria-label="Schließen">${uiSvg('x',16)}</button></div>
     <dl class="field-map-info-grid"><div><dt>${t('fieldCrop')}</dt><dd>${esc(cropName(field.crop))}</dd></div><div><dt>${t('fieldSize')}</dt><dd>${num1(field.ha)} ha</dd></div><div><dt>${t('fieldOwner')}</dt><dd>${esc(owner)}</dd></div><div><dt>${t('fieldState')}</dt><dd>${esc(stageLabel(field.stage))}</dd></div><div><dt>${t('fieldGrowth')}</dt><dd>${Math.max(0,Math.min(100,Number(field.pct)||0))}%</dd></div></dl>`;
+  box.hidden = false;
+}
+
+function renderVehicleMapInfo(vehicleId) {
+  const box = $('vehicleMapInfo'), machine = machines.find(m => String(m.id) === String(vehicleId));
+  if (!box || !machine) { if (box) box.hidden = true; return; }
+  selectedMapVehicle = machine.id;
+  selectedMapField = null;
+  $('fieldMapInfo').hidden = true;
+  const model = [machine.brand, machine.model].filter(Boolean).join(' ') || machine.name;
+  box.innerHTML = `<div class="flex items-center justify-between gap-3"><div><div class="muted text-xs">${t('vehiclesLegend')}</div><div class="font-display text-xl font-bold">${esc(machine.name)}</div></div><button type="button" class="field-info-close vehicle-info-close" aria-label="Schließen">${uiSvg('x',16)}</button></div>
+    <dl class="field-map-info-grid"><div><dt>${t('vehicleModel')}</dt><dd>${esc(model)}</dd></div><div><dt>${t('vehicleType')}</dt><dd>${esc(prettify(machine.type))}</dd></div><div><dt>${t('vehicleDamage')}</dt><dd>${Math.round(machine.damage)}%</dd></div><div><dt>${t('vehicleRuntime')}</dt><dd>${t('hoursShort',{n:num1(machine.operatingHours)})}</dd></div><div><dt>${t('vehicleStatus')}</dt><dd>${esc(t('s_' + machine.status))}</dd></div><div><dt>${t('fField')}</dt><dd>${machine.field ? t('fieldN',{n:machine.field}) : t('yard')}</dd></div></dl>`;
   box.hidden = false;
 }
 
@@ -584,7 +618,7 @@ function renderLiveMap() {
   const vehicleMarkers = positionedMachines.map(m => {
     const p = mapPosition(m.x, m.z);
     const detail = `${m.name}${m.field ? ' · ' + t('fieldN',{n:m.field}) : ''}`;
-    return `<span class="map-object map-vehicle" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(detail)}">${svg(ui.tractor,16)}</span>`;
+    return `<button type="button" class="map-object map-vehicle" data-vehicle-id="${esc(m.id)}" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(detail)}">${svg(ui.tractor,16)}</button>`;
   }).join('');
   const playerMarkers = positionedPlayers.map(player => {
     const p = mapPosition(player.x, player.z);
@@ -597,6 +631,7 @@ function renderLiveMap() {
   markers.innerHTML = fieldMarkers + vehicleMarkers + playerMarkers;
   updateLiveMapTransform();
   if (selectedMapField != null) renderFieldMapInfo(selectedMapField);
+  if (selectedMapVehicle != null) renderVehicleMapInfo(selectedMapVehicle);
 }
 
 function cardHTML(f) {
@@ -672,7 +707,7 @@ function renderMachines() {
   }
   $('machList').innerHTML = machines.map(m => {
     const who = opName(m), loc2 = m.field ? `<span class="pill on">${t('fieldN', { n: m.field })}</span>` : `<span class="pill muted">${t(m.status === 'hauling' ? 'onRoad' : 'inYard')}</span>`;
-    return `<li class="mcard hit" tabindex="0" ${m.field ? `data-field="${m.field}"` : ''}><span class="tile" style="color:var(--text)">${svg(ui[m.kind] || ui.tractor, 22)}</span>
+    return `<li class="mcard hit" tabindex="0" data-vehicle-id="${esc(m.id)}" ${m.field ? `data-field="${m.field}"` : ''}><span class="tile" style="color:var(--text)">${svg(ui[m.kind] || ui.tractor, 22)}</span>
       <div class="min-w-0 flex-1"><div class="font-semibold text-sm truncate">${esc(m.name)}</div>
       <div class="muted text-xs truncate">${esc(t(m.type))}</div><div class="muted text-xs truncate">${esc(t(m.task) + (who ? ', ' + who : ''))}</div>
       <div class="text-xs mt-1 flex items-center gap-1.5"><span class="dot" style="--d:${STATUS_DOT[m.status]}"></span>${t('s_' + m.status)}</div></div>${loc2}</li>`;
@@ -680,6 +715,12 @@ function renderMachines() {
   const act = machines.filter(m => m.status !== 'idle').length;
   $('mach-sum').textContent = t('machSum', { a: act, i: machines.length - act });
 }
+$('machList').addEventListener('click', e => {
+  const card = e.target.closest('[data-vehicle-id]');
+  if (!card) return;
+  renderVehicleMapInfo(card.dataset.vehicleId);
+  $('liveMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
 
 /* ---------- Task board ---------- */
 const taskName = x => (x.nameKey ? t(x.nameKey) : x.name);
@@ -728,7 +769,8 @@ async function loadTelemetry() {
       id: v.id, name: v.name || 'Fahrzeug', type: v.type || 'Fahrzeug', kind: v.kind || 'tractor',
       field: v.fieldNumber == null ? null : Number(v.fieldNumber), status: v.status || 'idle',
       task: v.task || (v.status === 'working' ? 'Arbeitet' : 'Geparkt'), op: v.operator || null,
-      x: v.x == null ? null : Number(v.x), z: v.z == null ? null : Number(v.z)
+      x: v.x == null ? null : Number(v.x), z: v.z == null ? null : Number(v.z), model: v.model || v.name || 'Fahrzeug',
+      brand: v.brand || '', damage: Number(v.damagePercent) || 0, operatingHours: Number(v.operatingHours) || 0
     }));
     gamePlayers = (payload.players || []).map(p => ({
       id: p.id, name: p.name || p.nickname || 'Spieler', x: p.x == null ? null : Number(p.x), z: p.z == null ? null : Number(p.z),
@@ -747,19 +789,57 @@ function renderForm() {
   sel.innerHTML = `<option value="">${t('yard')}</option>` + fields.filter(f => f.owned).map(f => `<option value="${f.n}">${t('fieldN', { n: f.n })}, ${esc(cropName(f.crop))}</option>`).join('');
   sel.value = cur;
   $('taskList').innerHTML = PRESETS.map(k => `<option value="${esc(t(k))}"></option>`).join('');
-  $('playerList').innerHTML = players.map(p => `<option value="${esc(p.username)}"></option>`).join('');
+  const currentType = $('fType').value || 'field';
+  $('fType').innerHTML = TASK_TYPES.map(type => `<option value="${type}">${esc(t('type_' + type))}</option>`).join('');
+  $('fType').value = TASK_TYPES.includes(currentType) ? currentType : 'field';
+  const checked = new Set([...document.querySelectorAll('#assigneePicker input:checked')].map(input => input.value));
+  const choices = [...assignableUsers.map(p => ({ key:`discord:${p.id}`, id:p.id, name:p.name })),
+    ...gamePlayers.map(p => ({ key:`game:${p.id || p.name}`, id:null, name:p.name }))];
+  const unique = [...new Map(choices.filter(p => p.name).map(p => [p.key, p])).values()];
+  $('assigneePicker').innerHTML = unique.length ? unique.map(p => `<label class="assignee-choice"><input type="checkbox" value="${esc(p.key)}" data-id="${esc(p.id || '')}" data-name="${esc(p.name)}" ${checked.has(p.key) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('') : `<span class="muted text-xs">${t('unassigned')}</span>`;
+}
+
+function resetTaskForm() {
+  editingTaskId = null;
+  $('taskForm').reset();
+  $('fType').value = 'field';
+  document.querySelectorAll('#assigneePicker input').forEach(input => input.checked = false);
+  $('taskSubmitLabel').textContent = t('addTask');
+  $('cancelTaskEdit').hidden = true;
+}
+
+function editTask(task) {
+  editingTaskId = task.id;
+  $('fName').value = task.name || '';
+  $('fField').value = task.field || '';
+  $('fType').value = task.type || 'field';
+  (task.assignees || []).filter(a => !a.claimed && ![...document.querySelectorAll('#assigneePicker input')].some(input => input.value === a.key)).forEach(a => {
+    $('assigneePicker').insertAdjacentHTML('beforeend', `<label class="assignee-choice"><input type="checkbox" value="${esc(a.key)}" data-id="${esc(a.id || '')}" data-name="${esc(a.name)}"><span>${esc(a.name)}</span></label>`);
+  });
+  document.querySelectorAll('#assigneePicker input').forEach(input => {
+    input.checked = (task.assignees || []).some(a => a.key === input.value && !a.claimed);
+  });
+  const urgency = document.querySelector(`input[name="urg"][value="${task.urgency}"]`);
+  if (urgency) urgency.checked = true;
+  $('taskSubmitLabel').textContent = t('saveTask');
+  $('cancelTaskEdit').hidden = false;
+  $('fName').focus();
 }
 
 function renderTasks(focusId) {
   const list = [...tasks].sort((a, b) => a.done - b.done || URG_RANK[a.urgency] - URG_RANK[b.urgency] || b.id - a.id);
-  $('taskBody').innerHTML = list.length ? list.map(x => `
+  $('taskBody').innerHTML = list.length ? list.map(x => {
+    const assigned = (x.assignees || []).length ? x.assignees.map(a => `<span class="assignee-pill ${a.claimed ? 'claimed' : ''}">${a.claimed ? '✓ ' : ''}${esc(a.name)}</span>`).join('') : `<span class="muted">${t('unassigned')}</span>`;
+    const claim = x.done ? '' : `<button type="button" class="claim-btn ${x.claimedByMe ? 'mine' : ''}" data-${x.claimedByMe ? 'unclaim' : 'claim'}="${x.id}">${t(x.claimedByMe ? 'unclaimTask' : 'claimTask')}</button>`;
+    return `
     <tr class="${x.done ? 'done' : ''}" ${x.field ? `data-field="${x.field}"` : ''}>
       <td><label class="chk"><input type="checkbox" data-id="${x.id}" ${x.done ? 'checked' : ''} aria-label="${esc(taskName(x))}"><span class="box"></span></label></td>
-      <td class="font-medium">${esc(taskName(x))}</td>
+      <td class="font-medium">${esc(taskName(x))}<br><span class="task-type">${esc(t('type_' + (x.type || 'field')))}</span></td>
       <td>${x.field ? t('fieldN', { n: x.field }) : t('yard')}</td>
-      <td>${x.player ? esc(x.player) : `<span class="muted">${t('unassigned')}</span>`}</td>
+      <td>${assigned}</td>
       <td><span class="urg" style="--c:${URG_COLOR[x.urgency]}">${t(x.urgency)}</span></td>
-      <td>${currentPermissions.can_delete_tasks ? `<button type="button" class="xbtn" data-del="${x.id}" aria-label="${t('removeTask')}">${uiSvg('x', 16)}</button>` : ''}</td></tr>`).join('')
+      <td><div class="task-actions">${claim}${currentPermissions.can_create_tasks ? `<button type="button" class="admin-action" data-edit="${x.id}">${t('editTask')}</button>` : ''}${currentPermissions.can_delete_tasks ? `<button type="button" class="xbtn" data-del="${x.id}" aria-label="${t('removeTask')}">${uiSvg('x', 16)}</button>` : ''}</div></td></tr>`;
+  }).join('')
     : `<tr><td colspan="6" class="muted text-center" style="padding:28px 10px">${t('noTasks')}</td></tr>`;
   const done = tasks.filter(x => x.done).length;
   $('task-sum').textContent = t('taskSum', { o: tasks.length - done, d: done });
@@ -772,19 +852,23 @@ $('taskForm').addEventListener('submit', async e => {
   if (!name) { $('fErr').textContent = t('errTask'); $('fName').focus(); return; }
   $('fErr').textContent = '';
   try {
-    await apiRequest('/api/tasks', { method: 'POST', body: JSON.stringify({
+    const assignees = [...document.querySelectorAll('#assigneePicker input:checked')].map(input => ({ id: input.dataset.id || null, name: input.dataset.name }));
+    const body = {
       name,
       field: $('fField').value ? +$('fField').value : null,
-      player: $('fPlayer').value.trim(),
+      type: $('fType').value,
+      assignees,
       urgency: document.querySelector('input[name="urg"]:checked').value
-    }) });
-    $('fName').value = '';
+    };
+    await apiRequest(editingTaskId ? `/api/tasks/${encodeURIComponent(editingTaskId)}/details` : '/api/tasks', { method: editingTaskId ? 'PATCH' : 'POST', body: JSON.stringify(body) });
+    resetTaskForm();
     await loadTasks();
     $('fName').focus();
   } catch (error) {
     $('fErr').textContent = error.message;
   }
 });
+$('cancelTaskEdit').addEventListener('click', resetTaskForm);
 $('taskBody').addEventListener('change', async e => {
   const c = e.target.closest('input[data-id]'); if (!c) return;
   try {
@@ -797,6 +881,17 @@ $('taskBody').addEventListener('change', async e => {
   }
 });
 $('taskBody').addEventListener('click', async e => {
+  const edit = e.target.closest('button[data-edit]');
+  if (edit) { const task = tasks.find(item => String(item.id) === edit.dataset.edit); if (task) editTask(task); return; }
+  const claim = e.target.closest('button[data-claim],button[data-unclaim]');
+  if (claim) {
+    const id = claim.dataset.claim || claim.dataset.unclaim;
+    try {
+      await apiRequest(`/api/tasks/${encodeURIComponent(id)}/claim`, { method: claim.dataset.unclaim ? 'DELETE' : 'POST' });
+      await loadTasks();
+    } catch (error) { $('fErr').textContent = error.message; }
+    return;
+  }
   const b = e.target.closest('button[data-del]'); if (!b) return;
   try {
     await apiRequest(`/api/tasks/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
@@ -864,11 +959,15 @@ $('liveMap').addEventListener('pointercancel', stopLiveMapDrag);
 $('liveMap').addEventListener('click', e => {
   if (e.target.closest('.field-info-close')) {
     selectedMapField = null;
+    selectedMapVehicle = null;
     $('fieldMapInfo').hidden = true;
+    $('vehicleMapInfo').hidden = true;
     return;
   }
   const marker = e.target.closest('.map-field[data-field]');
   if (marker) renderFieldMapInfo(marker.dataset.field);
+  const vehicleMarker = e.target.closest('.map-vehicle[data-vehicle-id]');
+  if (vehicleMarker) renderVehicleMapInfo(vehicleMarker.dataset.vehicleId);
 });
 window.addEventListener('resize', updateLiveMapTransform);
 function bindHighlight(el) {
@@ -930,6 +1029,7 @@ applyLang();
   }
 
   function unlock(user) {
+    currentUser = user;
     currentPermissions = { ...currentPermissions, ...(user.permissions || {}) };
     authUsername.textContent = user.username || 'Discord-Nutzer';
     if (user.avatar) {
@@ -946,6 +1046,7 @@ applyLang();
     gate.hidden = true;
     loadTasks();
     loadTelemetry();
+    loadAssignableUsers();
     startPresence();
     startRealtime();
   }
@@ -959,6 +1060,14 @@ applyLang();
     } catch (error) {
       console.warn('Online-Nutzer konnten nicht geladen werden:', error.message);
     }
+  }
+
+  async function loadAssignableUsers() {
+    try {
+      const data = await apiRequest('/api/users/assignable');
+      assignableUsers = data.users || [];
+      renderForm();
+    } catch (error) { console.warn('Zuweisbare Nutzer konnten nicht geladen werden:', error.message); }
   }
 
   async function refreshPresence() {
@@ -981,6 +1090,7 @@ applyLang();
     eventStream = new EventSource('/api/events');
     eventStream.addEventListener('tasks-changed', () => loadTasks());
     eventStream.addEventListener('presence-changed', () => loadOnlineUsers());
+    eventStream.addEventListener('users-changed', () => loadAssignableUsers());
     eventStream.addEventListener('telemetry-changed', () => loadTelemetry());
     eventStream.onerror = () => console.warn('Live-Verbindung wird automatisch neu aufgebaut.');
     taskSyncTimer = window.setInterval(loadTasks, 15000);

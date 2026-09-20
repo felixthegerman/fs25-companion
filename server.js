@@ -514,19 +514,31 @@ app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('
     res.json({ user });
 });
 
+const TASK_TYPES = ['field', 'animal', 'vehicle', 'transport', 'production', 'maintenance', 'other'];
+function normalizeTaskAssignees(input) {
+    if (!Array.isArray(input)) return [];
+    const seen = new Set();
+    return input.slice(0, 12).map((entry) => {
+        const name = String(entry?.name || '').trim().slice(0, 64);
+        const discordId = /^\d{17,20}$/.test(String(entry?.id || '')) ? String(entry.id) : null;
+        const key = discordId ? `discord:${discordId}` : `external:${sha256(name.toLowerCase()).slice(0, 20)}`;
+        return { assignee_key: key, discord_id: discordId, display_name: name, is_claimed: false };
+    }).filter((entry) => entry.display_name && !seen.has(entry.assignee_key) && seen.add(entry.assignee_key));
+}
+function taskJson(task, currentUserId) {
+    const assignees = (task.task_assignees || []).map((entry) => ({
+        key: entry.assignee_key, id: entry.discord_id, name: entry.display_name,
+        claimed: Boolean(entry.is_claimed), mine: entry.discord_id === currentUserId,
+    }));
+    return { id: task.id, name: task.task_name, field: task.field_number, player: task.player_name,
+        type: task.task_type || 'field', urgency: task.priority, done: task.is_completed,
+        createdBy: task.created_by, assignees, claimedByMe: assignees.some((entry) => entry.mine && entry.claimed) };
+}
+
 app.get('/api/tasks', requireApprovedPermission(), async (req, res) => {
-    const { data: tasks, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+    const { data: tasks, error } = await supabase.from('tasks').select('*,task_assignees(*)').order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: 'Aufgaben konnten nicht geladen werden.' });
-    res.json({
-        tasks: tasks.map((task) => ({
-            id: task.id,
-            name: task.task_name,
-            field: task.field_number,
-            player: task.player_name,
-            urgency: task.priority,
-            done: task.is_completed,
-        })),
-    });
+    res.json({ tasks: tasks.map((task) => taskJson(task, req.session.user.id)) });
 });
 
 app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req, res) => {
@@ -534,25 +546,73 @@ app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req
     const player = String(req.body.player || '').trim();
     const field = req.body.field === null || req.body.field === '' ? null : Number(req.body.field);
     const urgency = String(req.body.urgency || 'medium');
+    const taskType = String(req.body.type || 'field');
+    const assignees = normalizeTaskAssignees(req.body.assignees);
     if (!name || name.length > 120) return res.status(400).json({ error: 'Der Aufgabenname ist ungültig.' });
     if (player.length > 64) return res.status(400).json({ error: 'Der Spielername ist zu lang.' });
     if (field !== null && (!Number.isInteger(field) || field < 1 || field > 999)) {
         return res.status(400).json({ error: 'Die Feldnummer ist ungültig.' });
     }
     if (!['low', 'medium', 'high'].includes(urgency)) return res.status(400).json({ error: 'Die Dringlichkeit ist ungültig.' });
+    if (!TASK_TYPES.includes(taskType)) return res.status(400).json({ error: 'Die Aufgabenart ist ungültig.' });
 
     const { data: task, error } = await supabase.from('tasks').insert({
         task_name: name,
         field_number: field,
-        player_name: player,
+        player_name: assignees.map((entry) => entry.display_name).join(', ') || player,
+        task_type: taskType,
         priority: urgency,
         is_completed: false,
         created_by: req.session.user.id,
     }).select('*').single();
 
     if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht erstellt werden.' });
+    if (assignees.length) {
+        const { error: assigneeError } = await supabase.from('task_assignees').insert(assignees.map((entry) => ({ ...entry, task_id: task.id })));
+        if (assigneeError) return res.status(500).json({ error: 'Aufgabe wurde erstellt, aber Beteiligte konnten nicht gespeichert werden.' });
+    }
     broadcast('tasks-changed', { action: 'created', taskId: task.id });
     res.status(201).json({ task });
+});
+
+app.patch('/api/tasks/:id/details', requireApprovedPermission('can_create_tasks'), async (req, res) => {
+    const id = Number(req.params.id), name = String(req.body.name || '').trim();
+    const field = req.body.field === null || req.body.field === '' ? null : Number(req.body.field);
+    const urgency = String(req.body.urgency || 'medium'), taskType = String(req.body.type || 'field');
+    const assignees = normalizeTaskAssignees(req.body.assignees);
+    if (!Number.isInteger(id) || id < 1 || !name || name.length > 120) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    if (field !== null && (!Number.isInteger(field) || field < 1 || field > 999)) return res.status(400).json({ error: 'Die Feldnummer ist ungültig.' });
+    if (!['low', 'medium', 'high'].includes(urgency) || !TASK_TYPES.includes(taskType)) return res.status(400).json({ error: 'Aufgabenart oder Dringlichkeit ist ungültig.' });
+    const { data: task, error } = await supabase.from('tasks').update({ task_name: name, field_number: field,
+        player_name: assignees.map((entry) => entry.display_name).join(', '), task_type: taskType, priority: urgency, updated_at: new Date().toISOString() })
+        .eq('id', id).select('*').single();
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht bearbeitet werden.' });
+    await supabase.from('task_assignees').delete().eq('task_id', id).eq('is_claimed', false);
+    if (assignees.length) await supabase.from('task_assignees').upsert(assignees.map((entry) => ({ ...entry, task_id: id })), { onConflict: 'task_id,assignee_key', ignoreDuplicates: true });
+    broadcast('tasks-changed', { action: 'edited', taskId: id });
+    res.json({ task });
+});
+
+app.post('/api/tasks/:id/claim', requireApprovedPermission(), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    const { data: task } = await supabase.from('tasks').select('id,is_completed').eq('id', id).maybeSingle();
+    if (!task || task.is_completed) return res.status(400).json({ error: 'Diese Aufgabe kann nicht übernommen werden.' });
+    const row = { task_id: id, assignee_key: `discord:${req.session.user.id}`, discord_id: req.session.user.id,
+        display_name: req.session.user.username, is_claimed: true, assigned_at: new Date().toISOString() };
+    const { error } = await supabase.from('task_assignees').upsert(row, { onConflict: 'task_id,assignee_key' });
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht übernommen werden.' });
+    broadcast('tasks-changed', { action: 'claimed', taskId: id });
+    res.json({ success: true });
+});
+
+app.delete('/api/tasks/:id/claim', requireApprovedPermission(), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    const { error } = await supabase.from('task_assignees').delete().eq('task_id', id).eq('discord_id', req.session.user.id).eq('is_claimed', true);
+    if (error) return res.status(500).json({ error: 'Claim konnte nicht freigegeben werden.' });
+    broadcast('tasks-changed', { action: 'unclaimed', taskId: id });
+    res.json({ success: true });
 });
 
 app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
@@ -618,6 +678,13 @@ app.get('/api/online-users', requireApprovedPermission(), async (req, res) => {
             last_seen_at: user.last_seen_at,
         })),
     });
+});
+
+app.get('/api/users/assignable', requireApprovedPermission(), async (req, res) => {
+    const { data: users, error } = await supabase.from('discord_users')
+        .select('discord_id,username,global_name').eq('status', 'approved').order('global_name', { ascending: true });
+    if (error) return res.status(500).json({ error: 'Zuweisbare Nutzer konnten nicht geladen werden.' });
+    res.json({ users: users.map((user) => ({ id: user.discord_id, name: user.global_name || user.username })) });
 });
 
 app.get('/api/finances/summary', requireApprovedPermission(), async (req, res) => {
