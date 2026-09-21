@@ -427,7 +427,18 @@ app.post('/api/telemetry/ingest', async (req, res) => {
             amount: Number(e.amount), balance_after: e.balanceAfter == null ? null : Number(e.balanceAfter), currency: e.currency || 'USD',
             metadata: { source_id: source.id },
         }));
-        if (rows.length) await supabase.from('finance_transactions').upsert(rows, { onConflict: 'external_id', ignoreDuplicates: true });
+        if (rows.length) {
+            // Keep the first timestamp stable while a running FS25 transaction
+            // (for example refuelling) updates its final amount.
+            const externalIds = rows.map((row) => row.external_id);
+            const { data: existing, error: lookupError } = await supabase.from('finance_transactions')
+                .select('external_id,occurred_at').in('external_id', externalIds);
+            if (lookupError) return res.status(500).json({ error: 'Finanzbuchungen konnten nicht geprüft werden.' });
+            const occurredById = new Map((existing || []).map((row) => [row.external_id, row.occurred_at]));
+            rows.forEach((row) => { if (occurredById.has(row.external_id)) row.occurred_at = occurredById.get(row.external_id); });
+            const { error: financeError } = await supabase.from('finance_transactions').upsert(rows, { onConflict: 'external_id', ignoreDuplicates: false });
+            if (financeError) return res.status(500).json({ error: 'Finanzbuchungen konnten nicht gespeichert werden. Bitte supabase/schema.sql erneut ausführen.' });
+        }
     }
     broadcast('telemetry-changed', { sourceId: source.id, receivedAt: now });
     res.json({ success: true, received_at: now });
@@ -456,6 +467,13 @@ app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async
             is_super_admin: user.discord_id === ADMIN_DISCORD_ID,
         })),
     });
+});
+
+app.get('/api/admin/task-archive', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    const { data: archive, error } = await supabase.from('task_archive').select('*')
+        .order('deleted_at', { ascending: false }).limit(500);
+    if (error) return res.status(500).json({ error: 'Aufgabenarchiv konnte nicht geladen werden. Bitte supabase/tasks-upgrade.sql ausführen.' });
+    res.json({ archive: archive || [] });
 });
 
 app.patch('/api/admin/users/:discordId/status', requireApprovedPermission('can_manage_users'), async (req, res) => {
@@ -532,6 +550,26 @@ function taskJson(task, currentUserId) {
     return { id: task.id, name: task.task_name, field: task.field_number, player: task.player_name,
         type: task.task_type || 'field', urgency: task.priority, done: task.is_completed,
         createdBy: task.created_by, assignees, claimedByMe: assignees.some((entry) => entry.mine && entry.claimed) };
+}
+
+async function archiveTasks(taskRows, deletedBy) {
+    if (!taskRows?.length) return;
+    const ids = taskRows.map((task) => task.id);
+    const { data: assignees, error: assigneeError } = await supabase.from('task_assignees').select('*').in('task_id', ids);
+    if (assigneeError) throw new Error('Aufgabenzuweisungen konnten nicht archiviert werden.');
+    const byTask = new Map();
+    (assignees || []).forEach((entry) => {
+        const key = String(entry.task_id);
+        if (!byTask.has(key)) byTask.set(key, []);
+        byTask.get(key).push(entry);
+    });
+    const rows = taskRows.map((task) => ({
+        original_task_id: task.id,
+        deleted_by: deletedBy,
+        task_snapshot: { ...task, assignees: byTask.get(String(task.id)) || [] },
+    }));
+    const { error } = await supabase.from('task_archive').insert(rows);
+    if (error) throw new Error('Aufgabenarchiv fehlt. Bitte supabase/tasks-upgrade.sql ausführen.');
 }
 
 app.get('/api/tasks', requireApprovedPermission(), async (req, res) => {
@@ -644,6 +682,10 @@ app.patch('/api/tasks/:id', requireApprovedPermission(), async (req, res) => {
 });
 
 app.delete('/api/tasks/completed', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
+    const { data: completed, error: loadError } = await supabase.from('tasks').select('*').eq('is_completed', true);
+    if (loadError) return res.status(500).json({ error: 'Erledigte Aufgaben konnten nicht geladen werden.' });
+    try { await archiveTasks(completed || [], req.session.user.id); }
+    catch (error) { return res.status(500).json({ error: error.message }); }
     const { error } = await supabase.from('tasks').delete().eq('is_completed', true);
     if (error) return res.status(500).json({ error: 'Erledigte Aufgaben konnten nicht gelöscht werden.' });
     broadcast('tasks-changed', { action: 'completed-cleared' });
@@ -653,6 +695,11 @@ app.delete('/api/tasks/completed', requireApprovedPermission('can_delete_tasks')
 app.delete('/api/tasks/:id', requireApprovedPermission('can_delete_tasks'), async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
+    const { data: task, error: loadError } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+    if (loadError) return res.status(500).json({ error: 'Aufgabe konnte nicht geladen werden.' });
+    if (!task) return res.status(404).json({ error: 'Aufgabe wurde nicht gefunden.' });
+    try { await archiveTasks([task], req.session.user.id); }
+    catch (error) { return res.status(500).json({ error: error.message }); }
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht gelöscht werden.' });
     broadcast('tasks-changed', { action: 'deleted', taskId: id });
@@ -735,7 +782,18 @@ app.get('/api/finances/transactions', requireApprovedPermission(), async (req, r
         .limit(limit);
 
     if (error) return res.status(500).json({ error: 'Finanztransaktionen konnten nicht geladen werden.' });
-    res.json({ transactions });
+    const grouped = [];
+    for (const transaction of transactions || []) {
+        const previous = grouped[grouped.length - 1];
+        const runningCost = transaction.category === 'refuel' || ['Fahrzeugkosten', 'Leasingkosten'].includes(transaction.description);
+        const closeInTime = previous && Math.abs(new Date(previous.occurred_at) - new Date(transaction.occurred_at)) <= 45000;
+        if (runningCost && closeInTime && previous.category === transaction.category && previous.description === transaction.description && previous.currency === transaction.currency) {
+            previous.amount = Number(previous.amount || 0) + Number(transaction.amount || 0);
+        } else {
+            grouped.push({ ...transaction });
+        }
+    }
+    res.json({ transactions: grouped });
 });
 
 app.get('/api/public-config', (req, res) => {

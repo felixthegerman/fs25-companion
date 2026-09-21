@@ -67,7 +67,15 @@
     .action.approve { color:var(--lime); }
     .action.reject,.action.block { color:var(--clay); }
     .empty { padding:35px; text-align:center; color:var(--muted); }
+    .archive-list { display:grid; gap:9px; }
+    .archive-item { border:1px solid var(--line); border-radius:10px; background:var(--panel2); overflow:hidden; }
+    .archive-summary { display:grid; grid-template-columns:minmax(190px,1.4fr) 120px minmax(170px,1fr) 160px; gap:14px; align-items:center; padding:12px 14px; cursor:pointer; list-style:none; }
+    .archive-summary::-webkit-details-marker { display:none; }
+    .archive-summary strong,.archive-summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .archive-meta { color:var(--muted); font-size:12px; }
+    .archive-json { margin:0; padding:14px; border-top:1px solid var(--line); color:#d5cfbf; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow:auto; }
     @media(max-width:760px){ .nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:29px}.page-head{align-items:flex-start;flex-direction:column}.search{max-width:none;width:100%} }
+    @media(max-width:760px){ .archive-summary{grid-template-columns:1fr 100px}.archive-summary .archive-wide{display:none} }
   </style>
 </head>
 <body>
@@ -116,12 +124,27 @@
         </div>
       </div>
     </section>
+
+    <section class="panel" style="margin-top:20px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+        <div><h2>Archiv gelöschter Aufgaben</h2><p class="muted" style="margin:5px 0 0;font-size:13px">Vollständige Daten bleiben hier für Administratoren erhalten.</p></div>
+        <strong id="archiveCount" style="color:var(--lime)">0</strong>
+      </div>
+      <div class="toolbar">
+        <input id="archiveSearch" class="search" type="search" placeholder="Archiv nach Aufgabe, Feld oder Person durchsuchen …">
+        <select id="archiveTypeFilter" class="select" aria-label="Archiv nach Aufgabenart filtern">
+          <option value="all">Alle Aufgabenarten</option><option value="field">Feldarbeit</option><option value="animal">Tierbezogen</option><option value="vehicle">Fahrzeug</option><option value="transport">Transport</option><option value="production">Produktion</option><option value="maintenance">Wartung</option><option value="other">Sonstiges</option>
+        </select>
+      </div>
+      <div id="taskArchive" class="archive-list"><div class="empty">Archiv wird geladen …</div></div>
+    </section>
   </main>
 
   <script>
     const STATUS = { pending:['Wartend','#F2B33D'], approved:['Angenommen','#8CCB5E'], rejected:['Abgelehnt','#D9805F'], blocked:['Gesperrt','#ef6b6b'] };
     let currentUser = null;
     let users = [];
+    let archivedTasks = [];
     let presenceTimer = null;
     let eventStream = null;
 
@@ -154,10 +177,30 @@
         return `<div class="user-row" data-user-id="${esc(user.discord_id)}"><div class="identity"><img src="${esc(user.avatar)}" alt=""><div><strong>${esc(user.display_name)}</strong><small>${esc(user.username)} · ${esc(user.discord_id)}</small></div></div><div><span class="status" style="--status:${statusColor}">${esc(statusLabel)}</span></div><div><div class="permissions">${permission(user,'can_create_tasks','Aufgaben erstellen')}${permission(user,'can_delete_tasks','Aufgaben löschen')}${permission(user,'can_manage_users','Nutzer verwalten')}</div>${save}</div><div class="actions">${actions}</div></div>`;
       }).join('') || '<div class="empty">Keine passenden Benutzer gefunden.</div>';
     }
+    function renderArchive() {
+      const query=document.getElementById('archiveSearch').value.trim().toLowerCase();
+      const type=document.getElementById('archiveTypeFilter').value;
+      const visible=archivedTasks.filter(row=>{
+        const task=row.task_snapshot||{};
+        return (type==='all'||task.task_type===type) && (!query||JSON.stringify(task).toLowerCase().includes(query));
+      });
+      document.getElementById('archiveCount').textContent=`${visible.length} / ${archivedTasks.length}`;
+      document.getElementById('taskArchive').innerHTML=visible.map(row=>{
+        const task=row.task_snapshot||{};
+        const people=(task.assignees||[]).map(person=>`${person.display_name}${person.is_claimed?' (übernommen)':''}`).join(', ')||'Nicht zugewiesen';
+        const field=task.field_number?`Feld ${task.field_number}`:'Hof';
+        const date=new Date(row.deleted_at).toLocaleString('de-DE');
+        return `<details class="archive-item"><summary class="archive-summary"><strong>${esc(task.task_name||'Unbenannte Aufgabe')}</strong><span>${esc(field)}</span><span class="archive-wide archive-meta">${esc(people)}</span><span class="archive-meta">Gelöscht ${esc(date)}</span></summary><pre class="archive-json">${esc(JSON.stringify({archivId:row.id,originalTaskId:row.original_task_id,deletedBy:row.deleted_by,deletedAt:row.deleted_at,...task},null,2))}</pre></details>`;
+      }).join('')||'<div class="empty">Keine passenden archivierten Aufgaben gefunden.</div>';
+    }
     async function loadUsers() {
       setFeedback('Benutzer werden geladen …');
       try { const data=await api('/api/admin/users'); users=data.users||[]; setFeedback(currentUser.is_super_admin?'':'Nur der Hauptadmin kann Berechtigungen ändern.'); render(); }
       catch(error){ setFeedback(error.message,true); }
+    }
+    async function loadTaskArchive() {
+      try { const data=await api('/api/admin/task-archive'); archivedTasks=data.archive||[]; renderArchive(); }
+      catch(error){ document.getElementById('taskArchive').innerHTML=`<div class="empty">${esc(error.message)}</div>`; }
     }
     async function updatePresence() {
       try { await api('/api/presence',{method:'POST'}); } catch (error) { console.warn(error.message); }
@@ -171,6 +214,7 @@
       if(eventStream)return;
       eventStream=new EventSource('/api/events');
       eventStream.addEventListener('users-changed',loadUsers);
+      eventStream.addEventListener('tasks-changed',loadTaskArchive);
     }
     document.getElementById('users').addEventListener('click', async event => {
       const row=event.target.closest('[data-user-id]'); if(!row)return;
@@ -181,12 +225,14 @@
         setFeedback('Änderungen gespeichert.'); await loadUsers();
       } catch(error){setFeedback(error.message,true);}
     });
-    document.getElementById('reload').addEventListener('click',loadUsers);
+    document.getElementById('reload').addEventListener('click',()=>Promise.all([loadUsers(),loadTaskArchive()]));
     document.getElementById('pairTelemetry').addEventListener('click',async()=>{
       try{const data=await api('/api/admin/telemetry/pairing-code',{method:'POST',body:JSON.stringify({name:'FS25 Spielstand'})});document.getElementById('pairingCode').textContent=data.code;document.getElementById('pairingResult').hidden=false;setFeedback('Kopplungscode erstellt. Er gilt 15 Minuten.');}catch(error){setFeedback(error.message,true);}
     });
     document.getElementById('search').addEventListener('input',render);
     document.getElementById('statusFilter').addEventListener('change',render);
+    document.getElementById('archiveSearch').addEventListener('input',renderArchive);
+    document.getElementById('archiveTypeFilter').addEventListener('change',renderArchive);
     (async()=>{
       try {
         const auth=await api('/api/auth/me');
@@ -197,7 +243,7 @@
         startPresence();
         startRealtime();
         if(currentUser.schema_ready===false){setFeedback('Führe zuerst supabase/schema.sql im Supabase SQL Editor aus.',true);return;}
-        await loadUsers();
+        await Promise.all([loadUsers(),loadTaskArchive()]);
       } catch(error){window.location.replace('/');}
     })();
   </script>

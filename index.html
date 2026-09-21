@@ -315,6 +315,11 @@ tailwind.config = { theme: { extend: { fontFamily: {
       </div>
 
       <div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          <input id="taskSearch" class="inp" type="search" data-i18n-ph="taskSearchPlaceholder" aria-label="Aufgaben durchsuchen">
+          <select id="taskStatusFilter" class="inp" aria-label="Aufgabenstatus filtern"></select>
+          <select id="taskTypeFilter" class="inp" aria-label="Aufgabenart filtern"></select>
+        </div>
         <div class="overflow-auto rounded-lg border" style="max-height:340px;border-color:var(--line)">
           <table class="tbl">
             <thead><tr>
@@ -369,7 +374,8 @@ const i18n = {
     taskSum: '{o} open, {d} done', fTask: 'Task name', phTask: 'e.g. Plow field 4', fField: 'Field number', fPlayer: 'Assigned player', phPlayer: 'Player name', fPlayers: 'People involved', playersHint: 'Multiple people can be selected.', fType: 'Task type',
     fUrgency: 'Urgency level', low: 'Low', medium: 'Medium', high: 'High', addTask: 'Add task', errTask: 'Enter a task name first.',
     colDone: 'Done', colTask: 'Task', colField: 'Field', colPlayer: 'Player', colUrgency: 'Urgency', colActions: 'Actions',
-    removeTask: 'Remove task', editTask: 'Edit', cancelEdit: 'Cancel', saveTask: 'Save task', claimTask: 'Claim', unclaimTask: 'Release', clearDone: 'Clear completed', noTasks: 'No tasks yet. Add the first one with the form.', unassigned: 'Unassigned',
+    removeTask: 'Remove task', editTask: 'Edit', cancelEdit: 'Cancel', saveTask: 'Save task', claimTask: 'Claim', unclaimTask: 'Release', clearDone: 'Clear completed', noTasks: 'No matching tasks.', unassigned: 'Unassigned',
+    taskSearchPlaceholder: 'Search tasks, fields or people …', filterAllStatuses: 'All statuses', filterOpen: 'Open', filterDone: 'Completed', filterClaimed: 'Claimed', filterMine: 'My tasks', filterAllTypes: 'All task types',
     type_field: 'Field work', type_animal: 'Animals', type_vehicle: 'Vehicle', type_transport: 'Transport', type_production: 'Production', type_maintenance: 'Maintenance', type_other: 'Other',
     vehicleModel: 'Model', vehicleType: 'Type', vehicleDamage: 'Damage', vehicleRuntime: 'Operating time', vehicleStatus: 'Status', hoursShort: '{n} h',
     noTaskCreatePermission: 'You may view and complete tasks, but you do not have permission to create them.',
@@ -384,7 +390,7 @@ const i18n = {
     footer: 'No placeholder game data is shown. Live values will appear after the FS25 telemetry integration.',
     crops: { WHEAT: 'Wheat', BARLEY: 'Barley', OAT: 'Oats', CANOLA: 'Canola', SORGHUM: 'Sorghum', SOYBEAN: 'Soybeans', SUNFLOWER: 'Sunflower', MAIZE: 'Corn', POTATO: 'Potatoes',
       SUGARBEET: 'Sugar beet', COTTON: 'Cotton', SUGARCANE: 'Sugar cane', GRASS: 'Grass', PEA: 'Peas', SPINACH: 'Spinach', GREENBEAN: 'Green beans', CARROT: 'Carrots',
-      PARSNIP: 'Parsnips', REDBEET: 'Red beet', RICE: 'Rice', HEMP: 'Hemp', SPELT: 'Spelt' }
+      PARSNIP: 'Parsnips', REDBEET: 'Red beet', RICE: 'Rice', HEMP: 'Hemp', SPELT: 'Spelt', RYE: 'Rye', RYECUT: 'Cut rye', CLOVER: 'Clover', FIELDGRASS: 'Field grass', GREENRYE: 'Green rye', ONION: 'Onions', HOPS: 'Hops', CAULIFLOWER: 'Cauliflower', ASPARAGUSGREEN: 'Green asparagus', ASPARAGUSWHITE: 'White asparagus', ASPARAGUS_GREEN: 'Green asparagus', ASPARAGUS_WHITE: 'White asparagus', CUCUMBER: 'Cucumbers' }
   },
   de: {
     navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navFinances: 'Finanzen', navAdmin: 'Admin', langLabel: 'Sprache',
@@ -409,7 +415,8 @@ const i18n = {
     taskSum: '{o} offen, {d} erledigt', fTask: 'Aufgabenname', phTask: 'z. B. Feld 4 pflügen', fField: 'Feldnummer', fPlayer: 'Zugewiesener Spieler', phPlayer: 'Spielername', fPlayers: 'Beteiligte Personen', playersHint: 'Mehrere Personen können ausgewählt werden.', fType: 'Aufgabenart',
     fUrgency: 'Dringlichkeit', low: 'Niedrig', medium: 'Mittel', high: 'Hoch', addTask: 'Aufgabe hinzufügen', errTask: 'Bitte zuerst einen Aufgabennamen eingeben.',
     colDone: 'Erledigt', colTask: 'Aufgabe', colField: 'Feld', colPlayer: 'Spieler', colUrgency: 'Dringlichkeit', colActions: 'Aktionen',
-    removeTask: 'Aufgabe entfernen', editTask: 'Bearbeiten', cancelEdit: 'Abbrechen', saveTask: 'Aufgabe speichern', claimTask: 'Übernehmen', unclaimTask: 'Freigeben', clearDone: 'Erledigte entfernen', noTasks: 'Noch keine Aufgaben. Füge die erste mit dem Formular hinzu.', unassigned: 'Nicht zugewiesen',
+    removeTask: 'Aufgabe entfernen', editTask: 'Bearbeiten', cancelEdit: 'Abbrechen', saveTask: 'Aufgabe speichern', claimTask: 'Übernehmen', unclaimTask: 'Freigeben', clearDone: 'Erledigte entfernen', noTasks: 'Keine passenden Aufgaben gefunden.', unassigned: 'Nicht zugewiesen',
+    taskSearchPlaceholder: 'Aufgaben, Felder oder Personen suchen …', filterAllStatuses: 'Alle Status', filterOpen: 'Offen', filterDone: 'Erledigt', filterClaimed: 'Übernommen', filterMine: 'Meine Aufgaben', filterAllTypes: 'Alle Aufgabenarten',
     type_field: 'Feldarbeit', type_animal: 'Tierbezogen', type_vehicle: 'Fahrzeug', type_transport: 'Transport', type_production: 'Produktion', type_maintenance: 'Wartung', type_other: 'Sonstiges',
     vehicleModel: 'Modell', vehicleType: 'Typ', vehicleDamage: 'Schaden', vehicleRuntime: 'Laufzeit', vehicleStatus: 'Status', hoursShort: '{n} Std.',
     noTaskCreatePermission: 'Du darfst Aufgaben ansehen und abhaken, hast aber kein Recht, neue Aufgaben zu erstellen.',
@@ -424,7 +431,7 @@ const i18n = {
     footer: 'Es werden keine Platzhalter-Spieldaten angezeigt. Live-Werte erscheinen nach der FS25-Telemetrieintegration.',
     crops: { WHEAT: 'Weizen', BARLEY: 'Gerste', OAT: 'Hafer', CANOLA: 'Raps', SORGHUM: 'Sorghum', SOYBEAN: 'Sojabohnen', SUNFLOWER: 'Sonnenblumen', MAIZE: 'Mais', POTATO: 'Kartoffeln',
       SUGARBEET: 'Zuckerrüben', COTTON: 'Baumwolle', SUGARCANE: 'Zuckerrohr', GRASS: 'Gras', PEA: 'Erbsen', SPINACH: 'Spinat', GREENBEAN: 'Grüne Bohnen', CARROT: 'Karotten',
-      PARSNIP: 'Pastinaken', REDBEET: 'Rote Bete', RICE: 'Reis', HEMP: 'Hanf', SPELT: 'Dinkel' }
+      PARSNIP: 'Pastinaken', REDBEET: 'Rote Bete', RICE: 'Reis', HEMP: 'Hanf', SPELT: 'Dinkel', RYE: 'Roggen', RYECUT: 'Geschnittener Roggen', CLOVER: 'Klee', FIELDGRASS: 'Feldgras', GREENRYE: 'Grünroggen', ONION: 'Zwiebeln', HOPS: 'Hopfen', CAULIFLOWER: 'Blumenkohl', ASPARAGUSGREEN: 'Grüner Spargel', ASPARAGUSWHITE: 'Weißer Spargel', ASPARAGUS_GREEN: 'Grüner Spargel', ASPARAGUS_WHITE: 'Weißer Spargel', CUCUMBER: 'Gurken' }
   }
 };
 
@@ -464,7 +471,13 @@ const telemetryCropMapping = {
   COTTON: ICON_DIR + 'cotton.png', SUGARCANE: ICON_DIR + 'sugarcane.png', GRASS: ICON_DIR + 'grass.png',
   PEA: ICON_DIR + 'pea.png', SPINACH: ICON_DIR + 'spinach.png', GREENBEAN: ICON_DIR + 'greenbean.png',
   CARROT: ICON_DIR + 'carrot.png', PARSNIP: ICON_DIR + 'parsnip.png', RICE: ICON_DIR + 'rice.png',
-  HEMP: ICON_DIR + 'hemp.png'   /* example of a custom or modded crop */
+  HEMP: ICON_DIR + 'hemp.png',
+  RYE: ICON_DIR + 'rye.png', RYE_CUT: ICON_DIR + 'rye.png', RYECUT: ICON_DIR + 'rye.png',
+  CLOVER: ICON_DIR + 'clover.png', CLOVER_WINDROW: ICON_DIR + 'clover.png',
+  FIELDGRASS: ICON_DIR + 'fieldgrass.png', FIELD_GRASS: ICON_DIR + 'fieldgrass.png',
+  GREENRYE: ICON_DIR + 'greenrye.png', GREEN_RYE: ICON_DIR + 'greenrye.png',
+  ONION: ICON_DIR + 'onion.png', HOPS: ICON_DIR + 'hops.png', CAULIFLOWER: ICON_DIR + 'cauliflower.png',
+  ASPARAGUS_GREEN: ICON_DIR + 'asparagus_green.png', ASPARAGUSGREEN: ICON_DIR + 'asparagus_green.png', ASPARAGUS_WHITE: ICON_DIR + 'asparagus_white.png', ASPARAGUSWHITE: ICON_DIR + 'asparagus_white.png', CUCUMBER: ICON_DIR + 'cucumber.png'
 };
 const canon = raw => String(raw || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
 const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${canon(raw).toLowerCase()}.png`;
@@ -538,7 +551,7 @@ let currentUser = null, editingTaskId = null, selectedMapVehicle = null;
 const $ = id => document.getElementById(id);
 const sum = a => a.reduce((x, y) => x + y, 0);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const opName = m => (m.helper ? t('helper', { n: m.helper }) : m.op || null);
+const opName = m => (m.helper ? t('helper', { n: m.helper }) : (m.op || ''));
 const workOn = n => machines.find(m => m.field === n && m.status === 'working');
 const fieldByN = n => fields.find(f => f.n === n);
 let activeStage = 'all', showUnowned = true;
@@ -558,7 +571,8 @@ function mapPosition(x, z) {
   if (![minX,maxX,minZ,maxZ].every(Number.isFinite) || maxX <= minX || maxZ <= minZ) return null;
   return {
     left: Math.max(1.5, Math.min(98.5, (x - minX) / (maxX - minX) * 100)),
-    top: Math.max(1.5, Math.min(98.5, (z - minZ) / (maxZ - minZ) * 100))
+    // Hof Bergmann's PDA image uses the opposite vertical world direction.
+    top: Math.max(1.5, Math.min(98.5, (maxZ - z) / (maxZ - minZ) * 100))
   };
 }
 
@@ -615,7 +629,8 @@ function renderLiveMap() {
     const p = mapPosition(f.x, f.z);
     return `<button type="button" class="map-object map-field ${f.owned ? 'owned' : ''}" data-field="${f.n}" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(t('fieldN',{n:f.n}) + ' · ' + cropName(f.crop))}">${f.n}</button>`;
   }).join('');
-  const vehicleMarkers = positionedMachines.map(m => {
+  const occupiedVehicleIds = new Set(positionedPlayers.map(player => String(player.vehicleId || '')).filter(Boolean));
+  const vehicleMarkers = positionedMachines.filter(machine => !occupiedVehicleIds.has(String(machine.id))).map(m => {
     const p = mapPosition(m.x, m.z);
     const detail = `${m.name}${m.field ? ' · ' + t('fieldN',{n:m.field}) : ''}`;
     return `<button type="button" class="map-object map-vehicle" data-vehicle-id="${esc(m.id)}" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(detail)}">${svg(ui.tractor,16)}</button>`;
@@ -679,8 +694,9 @@ function renderOps() {
   $('ops-sum').textContent = t('opsSum', { n: ops.length });
   $('ops').innerHTML = ops.length ? ops.map(m => {
     const f = fieldByN(m.field);
+    const operator = opName(m);
     return `<li class="item hit" tabindex="0" data-field="${m.field}"><span class="tile">${f ? cropImg(f.crop, 22) : ''}</span>
-      <div class="min-w-0 flex-1"><div class="text-sm font-semibold">${t('fieldN', { n: m.field })}</div><div class="muted text-xs truncate">${esc(t(m.task) + ', ' + opName(m))}</div></div>
+      <div class="min-w-0 flex-1"><div class="text-sm font-semibold">${t('fieldN', { n: m.field })}</div><div class="muted text-xs truncate">${esc(t(m.task) + (operator ? ', ' + operator : ''))}</div></div>
       <span class="dot" style="--d:var(--lime)" title="${t('s_working')}"></span></li>`;
   }).join('') : `<li class="muted text-sm py-3">${t('opsEmpty')}</li>`;
 }
@@ -693,9 +709,9 @@ function renderYield() {
     return;
   }
   $('yield-sum').textContent = t('yieldSum', { n: owned.filter(f => f.stage === 'ready').length });
-  $('yield').innerHTML = owned.filter(f => f.stage === 'growing').sort((a, b) => a.eta - b.eta || b.pct - a.pct).slice(0, 5).map(f => `
+  $('yield').innerHTML = owned.filter(f => f.stage === 'growing').sort((a, b) => (a.eta ?? 999) - (b.eta ?? 999) || b.pct - a.pct).slice(0, 5).map(f => `
     <li class="item hit" tabindex="0" data-field="${f.n}"><span class="tile">${cropImg(f.crop, 22)}</span>
-      <div class="min-w-0 flex-1"><div class="flex justify-between text-sm"><span class="font-semibold">${t('fieldN', { n: f.n })} <span class="muted font-normal">${esc(cropName(f.crop))}</span></span><span class="muted text-xs">${t(f.eta === 1 ? 'dayOne' : 'dayMany', { n: f.eta })}</span></div>
+      <div class="min-w-0 flex-1"><div class="flex justify-between text-sm"><span class="font-semibold">${t('fieldN', { n: f.n })} <span class="muted font-normal">${esc(cropName(f.crop))}</span></span><span class="muted text-xs">${f.eta != null && f.eta > 0 ? t(f.eta === 1 ? 'dayOne' : 'dayMany', { n: f.eta }) : `${Math.round(f.pct)}%`}</span></div>
       <div class="bar mt-1.5"><i style="width:${f.pct}%;background:var(--lime)"></i></div></div></li>`).join('');
 }
 
@@ -762,7 +778,7 @@ async function loadTelemetry() {
     fields = (payload.fields || []).map(f => ({
       n: Number(f.number ?? f.farmlandId ?? f.id), crop: String(f.crop || 'UNKNOWN').toUpperCase(),
       ha: Number(f.areaHa) || 0, owned: f.owned === true, stage: f.stage || 'fallow',
-      pct: Number(f.progress) || 0, eta: Number(f.etaDays) || 0, price: f.price == null ? null : Number(f.price),
+      pct: Number(f.progress) || 0, eta: f.etaDays == null ? null : Number(f.etaDays), price: f.price == null ? null : Number(f.price),
       x: f.x == null ? null : Number(f.x), z: f.z == null ? null : Number(f.z),
       ownerFarmId: f.ownerFarmId == null ? null : Number(f.ownerFarmId), ownerName: f.ownerName || null
     })).filter(f => Number.isFinite(f.n));
@@ -793,6 +809,12 @@ function renderForm() {
   const currentType = $('fType').value || 'field';
   $('fType').innerHTML = TASK_TYPES.map(type => `<option value="${type}">${esc(t('type_' + type))}</option>`).join('');
   $('fType').value = TASK_TYPES.includes(currentType) ? currentType : 'field';
+  const currentStatusFilter = $('taskStatusFilter').value || 'all';
+  $('taskStatusFilter').innerHTML = ['all', 'open', 'done', 'claimed', 'mine'].map(value => `<option value="${value}">${esc(t(value === 'all' ? 'filterAllStatuses' : 'filter' + value[0].toUpperCase() + value.slice(1)))}</option>`).join('');
+  $('taskStatusFilter').value = ['all', 'open', 'done', 'claimed', 'mine'].includes(currentStatusFilter) ? currentStatusFilter : 'all';
+  const currentTypeFilter = $('taskTypeFilter').value || 'all';
+  $('taskTypeFilter').innerHTML = `<option value="all">${esc(t('filterAllTypes'))}</option>` + TASK_TYPES.map(type => `<option value="${type}">${esc(t('type_' + type))}</option>`).join('');
+  $('taskTypeFilter').value = currentTypeFilter === 'all' || TASK_TYPES.includes(currentTypeFilter) ? currentTypeFilter : 'all';
   const checked = new Set([...document.querySelectorAll('#assigneePicker input:checked')].map(input => input.value));
   const choices = assignableUsers.map(p => ({ key:`discord:${p.id}`, id:p.id, name:p.name }));
   const unique = [...new Map(choices.filter(p => p.name).map(p => [p.key, p])).values()];
@@ -827,7 +849,17 @@ function editTask(task) {
 }
 
 function renderTasks(focusId) {
-  const list = [...tasks].sort((a, b) => a.done - b.done || URG_RANK[a.urgency] - URG_RANK[b.urgency] || b.id - a.id);
+  const query = $('taskSearch').value.trim().toLowerCase();
+  const status = $('taskStatusFilter').value;
+  const type = $('taskTypeFilter').value;
+  const list = tasks.filter(task => {
+    const assignees = (task.assignees || []).map(a => a.name).join(' ');
+    const haystack = `${taskName(task)} ${task.field || ''} ${assignees} ${t('type_' + (task.type || 'field'))}`.toLowerCase();
+    const statusMatch = status === 'all' || (status === 'open' && !task.done) || (status === 'done' && task.done)
+      || (status === 'claimed' && (task.assignees || []).some(a => a.claimed))
+      || (status === 'mine' && (task.assignees || []).some(a => a.mine));
+    return statusMatch && (type === 'all' || task.type === type) && (!query || haystack.includes(query));
+  }).sort((a, b) => a.done - b.done || URG_RANK[a.urgency] - URG_RANK[b.urgency] || b.id - a.id);
   $('taskBody').innerHTML = list.length ? list.map(x => {
     const assigned = (x.assignees || []).length ? x.assignees.map(a => `<span class="assignee-pill ${a.claimed ? 'claimed' : ''}">${a.claimed ? '✓ ' : ''}${esc(a.name)}</span>`).join('') : `<span class="muted">${t('unassigned')}</span>`;
     const claim = x.done ? '' : `<button type="button" class="claim-btn ${x.claimedByMe ? 'mine' : ''}" data-${x.claimedByMe ? 'unclaim' : 'claim'}="${x.id}">${t(x.claimedByMe ? 'unclaimTask' : 'claimTask')}</button>`;
@@ -911,6 +943,9 @@ $('clearDone').addEventListener('click', async () => {
   }
 });
 $('fName').addEventListener('input', () => { $('fErr').textContent = ''; });
+$('taskSearch').addEventListener('input', () => renderTasks());
+$('taskStatusFilter').addEventListener('change', () => renderTasks());
+$('taskTypeFilter').addEventListener('change', () => renderTasks());
 
 /* ---------- Map controls and cross-highlighting ---------- */
 $('filters').addEventListener('click', e => {
