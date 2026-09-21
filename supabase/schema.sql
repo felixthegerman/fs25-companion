@@ -203,11 +203,9 @@ alter table public.task_assignees add column if not exists is_claimed boolean no
 alter table public.task_assignees add column if not exists assigned_at timestamptz not null default now();
 update public.task_assignees set display_name = 'Spieler' where display_name is null or btrim(display_name) = '';
 alter table public.task_assignees alter column display_name set not null;
-insert into public.task_assignees (task_id, assignee_key, display_name, is_claimed)
-select id, 'legacy:' || lower(regexp_replace(player_name, '[^a-zA-Z0-9]+', '-', 'g')), player_name, false
-from public.tasks
-where btrim(player_name) <> ''
-on conflict (task_id, assignee_key) do nothing;
+-- Task assignments are website accounts only. Remove legacy free-text/game
+-- names left by older builds; approved Discord users can be assigned again.
+delete from public.task_assignees where discord_id is null;
 create index if not exists task_assignees_discord_idx on public.task_assignees(discord_id);
 
 -- Remove only the old built-in demo tasks. Real tasks created through the

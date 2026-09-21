@@ -515,15 +515,14 @@ app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('
 });
 
 const TASK_TYPES = ['field', 'animal', 'vehicle', 'transport', 'production', 'maintenance', 'other'];
-function normalizeTaskAssignees(input) {
+async function normalizeTaskAssignees(input) {
     if (!Array.isArray(input)) return [];
-    const seen = new Set();
-    return input.slice(0, 12).map((entry) => {
-        const name = String(entry?.name || '').trim().slice(0, 64);
-        const discordId = /^\d{17,20}$/.test(String(entry?.id || '')) ? String(entry.id) : null;
-        const key = discordId ? `discord:${discordId}` : `external:${sha256(name.toLowerCase()).slice(0, 20)}`;
-        return { assignee_key: key, discord_id: discordId, display_name: name, is_claimed: false };
-    }).filter((entry) => entry.display_name && !seen.has(entry.assignee_key) && seen.add(entry.assignee_key));
+    const ids = [...new Set(input.slice(0, 12).map((entry) => String(entry?.id || '')).filter((id) => /^\d{17,20}$/.test(id)))];
+    if (!ids.length) return [];
+    const { data: users, error } = await supabase.from('discord_users').select('discord_id,username,global_name,status').in('discord_id', ids).eq('status', 'approved');
+    if (error) throw new Error('Website-Nutzer konnten nicht geprüft werden.');
+    return (users || []).map((user) => ({ assignee_key: `discord:${user.discord_id}`, discord_id: user.discord_id,
+        display_name: user.global_name || user.username, is_claimed: false }));
 }
 function taskJson(task, currentUserId) {
     const assignees = (task.task_assignees || []).map((entry) => ({
@@ -536,9 +535,17 @@ function taskJson(task, currentUserId) {
 }
 
 app.get('/api/tasks', requireApprovedPermission(), async (req, res) => {
-    const { data: tasks, error } = await supabase.from('tasks').select('*,task_assignees(*)').order('created_at', { ascending: false });
+    const { data: tasks, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: 'Aufgaben konnten nicht geladen werden.' });
-    res.json({ tasks: tasks.map((task) => taskJson(task, req.session.user.id)) });
+    const ids = (tasks || []).map((task) => task.id);
+    let assignees = [], migrationRequired = false;
+    const assigneeQuery = supabase.from('task_assignees').select('*');
+    const result = ids.length ? await assigneeQuery.in('task_id', ids) : await assigneeQuery.limit(1);
+    if (result.error) migrationRequired = true;
+    else if (ids.length) assignees = result.data || [];
+    const byTask = new Map();
+    assignees.forEach((entry) => { if (!byTask.has(String(entry.task_id))) byTask.set(String(entry.task_id), []); byTask.get(String(entry.task_id)).push(entry); });
+    res.json({ tasks: (tasks || []).map((task) => taskJson({ ...task, task_assignees: byTask.get(String(task.id)) || [] }, req.session.user.id)), migrationRequired });
 });
 
 app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req, res) => {
@@ -547,7 +554,9 @@ app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req
     const field = req.body.field === null || req.body.field === '' ? null : Number(req.body.field);
     const urgency = String(req.body.urgency || 'medium');
     const taskType = String(req.body.type || 'field');
-    const assignees = normalizeTaskAssignees(req.body.assignees);
+    let assignees;
+    try { assignees = await normalizeTaskAssignees(req.body.assignees); }
+    catch (error) { return res.status(500).json({ error: error.message }); }
     if (!name || name.length > 120) return res.status(400).json({ error: 'Der Aufgabenname ist ungültig.' });
     if (player.length > 64) return res.status(400).json({ error: 'Der Spielername ist zu lang.' });
     if (field !== null && (!Number.isInteger(field) || field < 1 || field > 999)) {
@@ -566,10 +575,10 @@ app.post('/api/tasks', requireApprovedPermission('can_create_tasks'), async (req
         created_by: req.session.user.id,
     }).select('*').single();
 
-    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht erstellt werden.' });
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht erstellt werden. Bitte supabase/tasks-upgrade.sql ausführen.' });
     if (assignees.length) {
         const { error: assigneeError } = await supabase.from('task_assignees').insert(assignees.map((entry) => ({ ...entry, task_id: task.id })));
-        if (assigneeError) return res.status(500).json({ error: 'Aufgabe wurde erstellt, aber Beteiligte konnten nicht gespeichert werden.' });
+        if (assigneeError) return res.status(500).json({ error: 'Beteiligte konnten nicht gespeichert werden. Bitte supabase/tasks-upgrade.sql ausführen.' });
     }
     broadcast('tasks-changed', { action: 'created', taskId: task.id });
     res.status(201).json({ task });
@@ -579,14 +588,16 @@ app.patch('/api/tasks/:id/details', requireApprovedPermission('can_create_tasks'
     const id = Number(req.params.id), name = String(req.body.name || '').trim();
     const field = req.body.field === null || req.body.field === '' ? null : Number(req.body.field);
     const urgency = String(req.body.urgency || 'medium'), taskType = String(req.body.type || 'field');
-    const assignees = normalizeTaskAssignees(req.body.assignees);
+    let assignees;
+    try { assignees = await normalizeTaskAssignees(req.body.assignees); }
+    catch (error) { return res.status(500).json({ error: error.message }); }
     if (!Number.isInteger(id) || id < 1 || !name || name.length > 120) return res.status(400).json({ error: 'Ungültige Aufgabe.' });
     if (field !== null && (!Number.isInteger(field) || field < 1 || field > 999)) return res.status(400).json({ error: 'Die Feldnummer ist ungültig.' });
     if (!['low', 'medium', 'high'].includes(urgency) || !TASK_TYPES.includes(taskType)) return res.status(400).json({ error: 'Aufgabenart oder Dringlichkeit ist ungültig.' });
     const { data: task, error } = await supabase.from('tasks').update({ task_name: name, field_number: field,
         player_name: assignees.map((entry) => entry.display_name).join(', '), task_type: taskType, priority: urgency, updated_at: new Date().toISOString() })
         .eq('id', id).select('*').single();
-    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht bearbeitet werden.' });
+    if (error) return res.status(500).json({ error: 'Aufgabe konnte nicht bearbeitet werden. Bitte supabase/tasks-upgrade.sql ausführen.' });
     await supabase.from('task_assignees').delete().eq('task_id', id).eq('is_claimed', false);
     if (assignees.length) await supabase.from('task_assignees').upsert(assignees.map((entry) => ({ ...entry, task_id: id })), { onConflict: 'task_id,assignee_key', ignoreDuplicates: true });
     broadcast('tasks-changed', { action: 'edited', taskId: id });

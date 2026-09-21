@@ -748,6 +748,7 @@ async function loadTasks() {
     const data = await apiRequest('/api/tasks');
     tasks = data.tasks || [];
     renderTasks();
+    $('fErr').textContent = data.migrationRequired ? 'Bitte supabase/tasks-upgrade.sql einmal im Supabase SQL Editor ausführen.' : '';
   } catch (error) {
     $('fErr').textContent = error.message;
   }
@@ -793,8 +794,7 @@ function renderForm() {
   $('fType').innerHTML = TASK_TYPES.map(type => `<option value="${type}">${esc(t('type_' + type))}</option>`).join('');
   $('fType').value = TASK_TYPES.includes(currentType) ? currentType : 'field';
   const checked = new Set([...document.querySelectorAll('#assigneePicker input:checked')].map(input => input.value));
-  const choices = [...assignableUsers.map(p => ({ key:`discord:${p.id}`, id:p.id, name:p.name })),
-    ...gamePlayers.map(p => ({ key:`game:${p.id || p.name}`, id:null, name:p.name }))];
+  const choices = assignableUsers.map(p => ({ key:`discord:${p.id}`, id:p.id, name:p.name }));
   const unique = [...new Map(choices.filter(p => p.name).map(p => [p.key, p])).values()];
   $('assigneePicker').innerHTML = unique.length ? unique.map(p => `<label class="assignee-choice"><input type="checkbox" value="${esc(p.key)}" data-id="${esc(p.id || '')}" data-name="${esc(p.name)}" ${checked.has(p.key) ? 'checked' : ''}><span>${esc(p.name)}</span></label>`).join('') : `<span class="muted text-xs">${t('unassigned')}</span>`;
 }
