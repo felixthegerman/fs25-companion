@@ -74,6 +74,7 @@
     .archive-summary strong,.archive-summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .archive-meta { color:var(--muted); font-size:12px; }
     .archive-json { margin:0; padding:14px; border-top:1px solid var(--line); color:#d5cfbf; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow:auto; }
+    .archive-controls { display:flex; justify-content:flex-end; gap:7px; padding:0 14px 12px; }
     @media(max-width:760px){ .nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:29px}.page-head{align-items:flex-start;flex-direction:column}.search{max-width:none;width:100%} }
     @media(max-width:760px){ .archive-summary{grid-template-columns:1fr 100px}.archive-summary .archive-wide{display:none} }
   </style>
@@ -92,18 +93,18 @@
 
   <main>
     <div class="page-head">
-      <div><h1>Benutzerverwaltung</h1><p class="muted">Website-Zugänge und individuelle Berechtigungen verwalten.</p></div>
+      <div><h1>Administration</h1><p class="muted">Website-Zugänge, modulare Berechtigungen und das Aufgabenarchiv verwalten.</p></div>
       <button id="reload" class="btn" type="button">Neu laden</button>
     </div>
 
-    <section class="stats" aria-label="Benutzerübersicht">
+    <section id="userStats" class="stats" aria-label="Benutzerübersicht">
       <div class="stat"><span>Alle Nutzer</span><strong id="totalCount">–</strong></div>
       <div class="stat"><span>Wartend</span><strong id="pendingCount" style="color:var(--gold)">–</strong></div>
       <div class="stat"><span>Freigeschaltet</span><strong id="approvedCount" style="color:var(--lime)">–</strong></div>
       <div class="stat"><span>Gesperrt/abgelehnt</span><strong id="deniedCount" style="color:var(--clay)">–</strong></div>
     </section>
 
-    <section class="panel" style="padding:18px;margin-bottom:20px">
+    <section id="telemetryPanel" class="panel" style="padding:18px;margin-bottom:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div><h2 style="margin:0;font-family:'Barlow Condensed',sans-serif">FS25-Telemetrie koppeln</h2><p class="muted" style="margin:5px 0 0;font-size:13px">Erzeuge einen 15 Minuten gültigen Code für die Telemetrie-Bridge.</p></div>
         <button id="pairTelemetry" class="btn" type="button">Kopplungscode erzeugen</button>
@@ -111,7 +112,7 @@
       <div id="pairingResult" hidden style="margin-top:14px;padding:13px;border-radius:9px;background:var(--panel2)">Code: <strong id="pairingCode" style="font-size:24px;letter-spacing:4px;color:var(--lime)"></strong><span class="muted" style="margin-left:12px;font-size:12px">In der Bridge eingeben.</span></div>
     </section>
 
-    <section class="panel">
+    <section id="usersPanel" class="panel">
       <div class="toolbar">
         <input id="search" class="search" type="search" placeholder="Nach Name oder Discord-ID suchen …">
         <select id="statusFilter" class="select" aria-label="Status filtern"><option value="all">Alle Status</option><option value="pending">Wartend</option><option value="approved">Angenommen</option><option value="rejected">Abgelehnt</option><option value="blocked">Gesperrt</option></select>
@@ -125,7 +126,7 @@
       </div>
     </section>
 
-    <section class="panel" style="margin-top:20px">
+    <section id="archivePanel" class="panel" style="margin-top:20px">
       <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
         <div><h2>Archiv gelöschter Aufgaben</h2><p class="muted" style="margin:5px 0 0;font-size:13px">Vollständige Daten bleiben hier für Administratoren erhalten.</p></div>
         <strong id="archiveCount" style="color:var(--lime)">0</strong>
@@ -174,7 +175,7 @@
         const locked=user.is_super_admin||user.discord_id===currentUser.id;
         const actions=locked?`<span class="muted" style="font-size:12px">${user.is_super_admin?'Hauptadmin':'Eigenes Konto'}</span>`:`${user.status!=='approved'?`<button class="action approve" data-status="approved">Annehmen</button>`:''}${user.status!=='rejected'?`<button class="action reject" data-status="rejected">Ablehnen</button>`:''}${user.status!=='blocked'?`<button class="action block" data-status="blocked">Sperren</button>`:''}${user.status!=='pending'?`<button class="action" data-status="pending">Auf wartend setzen</button>`:''}`;
         const save=currentUser.is_super_admin&&!user.is_super_admin?'<button class="action save-rights" data-save>Rechte speichern</button>':'';
-        return `<div class="user-row" data-user-id="${esc(user.discord_id)}"><div class="identity"><img src="${esc(user.avatar)}" alt=""><div><strong>${esc(user.display_name)}</strong><small>${esc(user.username)} · ${esc(user.discord_id)}</small></div></div><div><span class="status" style="--status:${statusColor}">${esc(statusLabel)}</span></div><div><div class="permissions">${permission(user,'can_create_tasks','Aufgaben erstellen')}${permission(user,'can_delete_tasks','Aufgaben löschen')}${permission(user,'can_manage_users','Nutzer verwalten')}</div>${save}</div><div class="actions">${actions}</div></div>`;
+        return `<div class="user-row" data-user-id="${esc(user.discord_id)}"><div class="identity"><img src="${esc(user.avatar)}" alt=""><div><strong>${esc(user.display_name)}</strong><small>${esc(user.username)} · ${esc(user.discord_id)}</small></div></div><div><span class="status" style="--status:${statusColor}">${esc(statusLabel)}</span></div><div><div class="permissions">${permission(user,'can_create_tasks','Aufgaben erstellen')}${permission(user,'can_delete_tasks','Aufgaben löschen')}${permission(user,'can_manage_users','Nutzer verwalten')}${permission(user,'can_view_archive','Archiv ansehen')}${permission(user,'can_edit_archive','Archiv bearbeiten')}${permission(user,'can_delete_archive','Archiv endgültig löschen')}</div>${save}</div><div class="actions">${actions}</div></div>`;
       }).join('') || '<div class="empty">Keine passenden Benutzer gefunden.</div>';
     }
     function renderArchive() {
@@ -190,15 +191,18 @@
         const people=(task.assignees||[]).map(person=>`${person.display_name}${person.is_claimed?' (übernommen)':''}`).join(', ')||'Nicht zugewiesen';
         const field=task.field_number?`Feld ${task.field_number}`:'Hof';
         const date=new Date(row.deleted_at).toLocaleString('de-DE');
-        return `<details class="archive-item"><summary class="archive-summary"><strong>${esc(task.task_name||'Unbenannte Aufgabe')}</strong><span>${esc(field)}</span><span class="archive-wide archive-meta">${esc(people)}</span><span class="archive-meta">Gelöscht ${esc(date)}</span></summary><pre class="archive-json">${esc(JSON.stringify({archivId:row.id,originalTaskId:row.original_task_id,deletedBy:row.deleted_by,deletedAt:row.deleted_at,...task},null,2))}</pre></details>`;
+        const controls=`${currentUser.permissions?.can_edit_archive?`<button class="action" type="button" data-archive-edit="${row.id}">Bearbeiten</button>`:''}${currentUser.permissions?.can_delete_archive?`<button class="action block" type="button" data-archive-delete="${row.id}">Endgültig löschen</button>`:''}`;
+        return `<details class="archive-item"><summary class="archive-summary"><strong>${esc(task.task_name||'Unbenannte Aufgabe')}</strong><span>${esc(field)}</span><span class="archive-wide archive-meta">${esc(people)}</span><span class="archive-meta">Gelöscht ${esc(date)}</span></summary><pre class="archive-json">${esc(JSON.stringify({archivId:row.id,originalTaskId:row.original_task_id,deletedBy:row.deleted_by,deletedAt:row.deleted_at,...task},null,2))}</pre>${controls?`<div class="archive-controls">${controls}</div>`:''}</details>`;
       }).join('')||'<div class="empty">Keine passenden archivierten Aufgaben gefunden.</div>';
     }
     async function loadUsers() {
+      if(!currentUser?.permissions?.can_manage_users)return;
       setFeedback('Benutzer werden geladen …');
       try { const data=await api('/api/admin/users'); users=data.users||[]; setFeedback(currentUser.is_super_admin?'':'Nur der Hauptadmin kann Berechtigungen ändern.'); render(); }
       catch(error){ setFeedback(error.message,true); }
     }
     async function loadTaskArchive() {
+      if(!(currentUser?.permissions?.can_view_archive||currentUser?.permissions?.can_edit_archive||currentUser?.permissions?.can_delete_archive))return;
       try { const data=await api('/api/admin/task-archive'); archivedTasks=data.archive||[]; renderArchive(); }
       catch(error){ document.getElementById('taskArchive').innerHTML=`<div class="empty">${esc(error.message)}</div>`; }
     }
@@ -225,6 +229,26 @@
         setFeedback('Änderungen gespeichert.'); await loadUsers();
       } catch(error){setFeedback(error.message,true);}
     });
+    document.getElementById('taskArchive').addEventListener('click',async event=>{
+      const edit=event.target.closest('[data-archive-edit]');
+      const remove=event.target.closest('[data-archive-delete]');
+      if(!edit&&!remove)return;
+      const id=edit?.dataset.archiveEdit||remove?.dataset.archiveDelete;
+      const row=archivedTasks.find(item=>String(item.id)===String(id));
+      if(!row)return;
+      try{
+        if(remove){if(!window.confirm('Diesen Archiveintrag wirklich endgültig löschen?'))return;await api(`/api/admin/task-archive/${encodeURIComponent(id)}`,{method:'DELETE'});}
+        if(edit){
+          const task=row.task_snapshot||{};
+          const task_name=window.prompt('Aufgabenname',task.task_name||'');if(task_name===null)return;
+          const fieldInput=window.prompt('Feldnummer (leer = Hof)',task.field_number??'');if(fieldInput===null)return;
+          const task_type=window.prompt('Aufgabenart: field, animal, vehicle, transport, production, maintenance oder other',task.task_type||'field');if(task_type===null)return;
+          const priority=window.prompt('Priorität: low, medium oder high',task.priority||'medium');if(priority===null)return;
+          await api(`/api/admin/task-archive/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify({task_name,field_number:fieldInput.trim()===''?null:Number(fieldInput),task_type,priority})});
+        }
+        await loadTaskArchive();
+      }catch(error){setFeedback(error.message,true);}
+    });
     document.getElementById('reload').addEventListener('click',()=>Promise.all([loadUsers(),loadTaskArchive()]));
     document.getElementById('pairTelemetry').addEventListener('click',async()=>{
       try{const data=await api('/api/admin/telemetry/pairing-code',{method:'POST',body:JSON.stringify({name:'FS25 Spielstand'})});document.getElementById('pairingCode').textContent=data.code;document.getElementById('pairingResult').hidden=false;setFeedback('Kopplungscode erstellt. Er gilt 15 Minuten.');}catch(error){setFeedback(error.message,true);}
@@ -236,14 +260,20 @@
     (async()=>{
       try {
         const auth=await api('/api/auth/me');
-        if(!auth.loggedIn||!auth.user.is_approved||!auth.user.permissions?.can_manage_users){window.location.replace('/');return;}
+        const permissions=auth.user?.permissions||{};
+        const hasAdminAccess=permissions.can_manage_users||permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive;
+        if(!auth.loggedIn||!auth.user.is_approved||!hasAdminAccess){window.location.replace('/');return;}
         currentUser=auth.user;
         document.getElementById('username').textContent=currentUser.username;
         document.getElementById('avatar').src=currentUser.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
         startPresence();
         startRealtime();
+        document.getElementById('userStats').hidden=!permissions.can_manage_users;
+        document.getElementById('telemetryPanel').hidden=!permissions.can_manage_users;
+        document.getElementById('usersPanel').hidden=!permissions.can_manage_users;
+        document.getElementById('archivePanel').hidden=!(permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive);
         if(currentUser.schema_ready===false){setFeedback('Führe zuerst supabase/schema.sql im Supabase SQL Editor aus.',true);return;}
-        await Promise.all([loadUsers(),loadTaskArchive()]);
+        await Promise.all([permissions.can_manage_users?loadUsers():Promise.resolve(),(permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive)?loadTaskArchive():Promise.resolve()]);
       } catch(error){window.location.replace('/');}
     })();
   </script>

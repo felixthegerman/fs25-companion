@@ -12,7 +12,7 @@
     .account{margin-left:auto;display:flex;align-items:center;gap:9px}.account img{width:29px;height:29px;border-radius:50%;object-fit:cover}.account-name{font-size:14px;font-weight:600}.logout{font-size:12px;color:var(--muted);text-decoration:none}.logout:hover{color:var(--text)}
     main{max-width:1400px;margin:auto;padding:30px 24px 48px}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:22px}h1,h2{font-family:'Barlow Condensed',sans-serif;margin:0}h1{font-size:38px;line-height:1}h2{font-size:21px}.muted{color:var(--muted)}.page-head p{margin:7px 0 0;font-size:14px}
     .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}.stat,.panel{background:var(--panel);border:1px solid var(--line);border-radius:13px}.stat{padding:18px 20px}.stat span{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}.stat strong{display:block;font-family:'Barlow Condensed',sans-serif;font-size:30px;letter-spacing:.2px}.stat small{display:block;margin-top:5px;color:var(--muted);font-size:11px}.panel{padding:20px}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:15px}.panel-head p{margin:4px 0 0;font-size:13px}.status{font-size:12px;padding:6px 9px;border-radius:999px;background:var(--panel2);color:var(--muted);white-space:nowrap}.status.live{color:var(--lime)}
-    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}.table{min-width:760px}.row{display:grid;grid-template-columns:170px 150px minmax(260px,1fr) 150px 170px;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);font-size:13px}.row:last-child{border-bottom:0}.thead{color:var(--muted);font-size:12px;background:rgba(255,255,255,.015)}.amount{font-weight:700;text-align:right}.amount.in{color:var(--lime)}.amount.out{color:var(--clay)}.balance{text-align:right}.category{display:inline-flex;width:max-content;padding:5px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);font-size:11px}.empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.error{padding:12px 14px;border:1px solid rgba(217,128,95,.55);border-radius:9px;background:rgba(217,128,95,.1);color:#efb09a;font-size:13px;margin-bottom:14px}.error:empty{display:none}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}.table{min-width:760px}.row{display:grid;grid-template-columns:170px 170px minmax(260px,1fr) 150px 170px;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--line);font-size:13px}.row:last-child{border-bottom:0}.thead{color:var(--muted);font-size:12px;background:rgba(255,255,255,.015)}.amount{font-weight:700;text-align:right}.amount.in{color:var(--lime)}.amount.out{color:var(--clay)}.balance{text-align:right}.category{display:inline-flex;align-items:center;gap:6px;width:max-content;padding:5px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);font-size:11px}.category img{width:20px;height:20px;object-fit:contain}.empty{text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}.error{padding:12px 14px;border:1px solid rgba(217,128,95,.55);border-radius:9px;background:rgba(217,128,95,.1);color:#efb09a;font-size:13px;margin-bottom:14px}.error:empty{display:none}
     @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:1fr}.page-head{align-items:flex-start;flex-direction:column}h1{font-size:32px}.panel{padding:14px}}
   </style>
 </head>
@@ -55,6 +55,7 @@
 
   <script>
     const CATEGORY = {vehicle_purchase:'Fahrzeugkauf',vehicle_sale:'Fahrzeugverkauf',refuel:'Auftanken',maintenance:'Wartung',crop_sale:'Ernteverkauf',land_purchase:'Feldkauf',loan:'Kredit',other:'Sonstiges'};
+    const CATEGORY_ICON = {vehicle_purchase:'toytractor',vehicle_sale:'toytractor',refuel:'diesel',maintenance:'seedtreatingliquid',crop_sale:'wheat',land_purchase:'seeds',loan:'product',other:'unknown'};
     let presenceTimer=null;
     let eventStream=null;
     const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -73,7 +74,8 @@
       document.getElementById('transactionCount').textContent=`${items.length} ${items.length===1?'Buchung':'Buchungen'}`;
       document.getElementById('transactions').innerHTML=items.length?items.map(item=>{
         const amount=Number(item.amount)||0;
-        return `<div class="row"><span class="muted">${date(item.occurred_at)}</span><span><span class="category">${esc(CATEGORY[item.category]||item.category||CATEGORY.other)}</span></span><span>${esc(item.description||'Keine Beschreibung')}</span><span class="amount ${amount>=0?'in':'out'}">${amount>=0?'+ ':'− '}${currency(Math.abs(amount),item.currency)}</span><span class="balance">${item.balance_after==null?'–':currency(item.balance_after,item.currency)}</span></div>`;
+        const icon=CATEGORY_ICON[item.category]||CATEGORY_ICON.other;
+        return `<div class="row"><span class="muted">${date(item.occurred_at)}</span><span><span class="category"><img src="/assets/icons/fs25/${icon}.png" alt="" decoding="sync">${esc(CATEGORY[item.category]||item.category||CATEGORY.other)}</span></span><span>${esc(item.description||'Keine Beschreibung')}</span><span class="amount ${amount>=0?'in':'out'}">${amount>=0?'+ ':'− '}${currency(Math.abs(amount),item.currency)}</span><span class="balance">${item.balance_after==null?'–':currency(item.balance_after,item.currency)}</span></div>`;
       }).join(''):'<div class="empty">Noch keine Finanzdaten vorhanden. Diese Ansicht wird später automatisch mit der FS25-Telemetrie befüllt.</div>';
     }
     async function updatePresence(){try{await api('/api/presence',{method:'POST'});}catch(error){console.warn(error.message);}}
@@ -86,7 +88,8 @@
         if(!auth.loggedIn||!auth.user.is_approved){window.location.replace('/');return;}
         document.getElementById('username').textContent=auth.user.username||'Discord-Nutzer';
         document.getElementById('avatar').src=auth.user.avatar||'https://cdn.discordapp.com/embed/avatars/0.png';
-        document.getElementById('adminLink').hidden=!auth.user.permissions?.can_manage_users;
+        const permissions=auth.user.permissions||{};
+        document.getElementById('adminLink').hidden=!(permissions.can_manage_users||permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive);
         startPresence();
         startRealtime();
         await loadFinances();

@@ -89,7 +89,8 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .fcard.unowned .num { color: #c9c2b3; }
   .ico { display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; }
   .ico img { width: 28px; height: 28px; object-fit: contain; }
-  .crop-sprite { display:inline-block; flex:none; border-radius:5px; background-image:url('/assets/icons/fs25-crop-sprite.png'); background-repeat:no-repeat; background-size:600% 400%; background-position:var(--crop-x) var(--crop-y); image-rendering:auto; }
+  .field-filters { display:grid; grid-template-columns:minmax(180px,1fr) repeat(2,minmax(150px,220px)); gap:8px; margin-bottom:12px; }
+  @media(max-width:720px){.field-filters{grid-template-columns:1fr}}
   .fcard.owned .ico { color: rgba(241,246,236,.95); }
   .fcard.unowned .ico { color: rgba(162,155,139,.75); }
   .fcard.unowned .ico img { filter: grayscale(1) opacity(.7); }
@@ -265,7 +266,11 @@ tailwind.config = { theme: { extend: { fontFamily: {
         </div>
         <div class="map-legend"><span><i style="background:var(--gold)"></i><span data-i18n="playersLegend"></span></span><span><i style="background:var(--sky)"></i><span data-i18n="vehiclesLegend"></span></span><span><i style="background:var(--lime)"></i><span data-i18n="fieldsLegend"></span></span></div>
       </div>
-      <div id="filters" class="flex flex-wrap gap-2 mb-3" role="group" data-i18n-aria="filterAria"></div>
+      <div id="filters" class="field-filters" role="group" data-i18n-aria="filterAria">
+        <input id="fieldSearch" class="inp" type="search" data-i18n-ph="fieldSearchPlaceholder" aria-label="Felder durchsuchen">
+        <select id="fieldCropFilter" class="inp" aria-label="Feldfrucht filtern"></select>
+        <select id="fieldStatusFilter" class="inp" aria-label="Feldstatus filtern"></select>
+      </div>
       <div class="bed"><div id="fields" class="grid-fields"></div></div>
     </section>
 
@@ -359,7 +364,7 @@ const i18n = {
     chartCap: 'Daily income and maintenance, days 8 to 14', chartAria: 'Bar chart of daily income and maintenance costs',
     mapTitle: 'Field map', liveMapTitle: 'Live map', playersLegend: 'Players', vehiclesLegend: 'Vehicles', fieldsLegend: 'Field IDs', liveMapEmpty: 'Waiting for live position data from FS25 …', liveMapCount: '{p} players · {v} vehicles',
     fieldCrop: 'Current crop', fieldSize: 'Area', fieldOwner: 'Owner', fieldState: 'State', fieldGrowth: 'Growth', noOwner: 'Not owned', ownFarm: 'Own farm',
-    showUnowned: 'Show Unowned Fields', filterAria: 'Filter fields by growth stage', allFields: 'All fields',
+    showUnowned: 'Show Unowned Fields', filterAria: 'Search and filter fields', allFields: 'All fields', fieldSearchPlaceholder: 'Search field, crop or owner …', filterAllCrops: 'All crops', filterAllFieldStatuses: 'All field statuses',
     mapSum: '{owned} owned fields, {ha} ha, {ready} ready to harvest', mapSale: ', {n} for sale',
     forSale: 'For sale', onRequest: 'On request', noActivity: 'No activity', wip: 'Work in progress', fieldN: 'Field {n}', yard: 'Farmyard',
     st_fallow: 'Fallow', st_plowed: 'Cultivated', st_sown: 'Seedbed', st_growing: 'Growing', st_ready: 'Ready to harvest',
@@ -403,7 +408,7 @@ const i18n = {
     chartCap: 'Tägliche Einnahmen und Wartung, Tag 8 bis 14', chartAria: 'Balkendiagramm der täglichen Einnahmen und Wartungskosten',
     mapTitle: 'Feldkarte', liveMapTitle: 'Live-Karte', playersLegend: 'Spieler', vehiclesLegend: 'Fahrzeuge', fieldsLegend: 'Feld-IDs', liveMapEmpty: 'Warte auf Live-Positionsdaten aus FS25 …', liveMapCount: '{p} Spieler · {v} Fahrzeuge',
     fieldCrop: 'Aktuelle Frucht', fieldSize: 'Größe', fieldOwner: 'Besitzer', fieldState: 'Zustand', fieldGrowth: 'Wachstum', noOwner: 'Nicht gekauft', ownFarm: 'Eigener Hof',
-    showUnowned: 'Nicht erworbene Felder anzeigen', filterAria: 'Felder nach Wachstumsstufe filtern', allFields: 'Alle Felder',
+    showUnowned: 'Nicht erworbene Felder anzeigen', filterAria: 'Felder suchen und filtern', allFields: 'Alle Felder', fieldSearchPlaceholder: 'Feld, Frucht oder Besitzer suchen …', filterAllCrops: 'Alle Feldfrüchte', filterAllFieldStatuses: 'Alle Feldstatus',
     mapSum: '{owned} eigene Felder, {ha} ha, {ready} erntereif', mapSale: ', {n} zum Verkauf',
     forSale: 'Zu verkaufen', onRequest: 'Auf Anfrage', noActivity: 'Keine Aktivität', wip: 'Arbeit läuft', fieldN: 'Feld {n}', yard: 'Hof',
     st_fallow: 'Brache', st_plowed: 'Bearbeitet', st_sown: 'Saatbett', st_growing: 'Wachsend', st_ready: 'Erntereif',
@@ -461,49 +466,41 @@ const prettify = s => String(s || '').replace(/[_-]+/g, ' ').toLowerCase().repla
    2. CROP ICON FRAMEWORK
    canon() normalizes whatever the telemetry server sends ("Sugar beet",
    "sugar-beet", "SUGARBEET") to UPPER_SNAKE_CASE.
-   telemetryCropMapping maps those keys to files in your asset folder.
-   Drop your icon files into assets/icons/ (check GIANTS Software's
-   modding terms for using official FS25 artwork).
-   Anything not listed here still works: cropSrc() derives
-   assets/icons/<lowercase key>.png, and if that file is missing the <img>
+   telemetryCropMapping maps those keys to the supplied FS25 icon catalog.
+   Anything not listed here still works: cropSrc() derives a catalog file
+   name for custom-map crops, and if that file is missing the <img>
    is swapped for a built-in SVG so the dashboard never shows a broken image.
    ===================================================================== */
-const ICON_DIR = 'assets/icons/';
+const ICON_DIR = 'assets/icons/fs25/';
 const telemetryCropMapping = {
   WHEAT: ICON_DIR + 'wheat.png', BARLEY: ICON_DIR + 'barley.png', OAT: ICON_DIR + 'oat.png', CANOLA: ICON_DIR + 'canola.png',
   SORGHUM: ICON_DIR + 'sorghum.png', SOYBEAN: ICON_DIR + 'soybean.png', SUNFLOWER: ICON_DIR + 'sunflower.png',
   MAIZE: ICON_DIR + 'maize.png', CORN: ICON_DIR + 'maize.png',
   POTATO: ICON_DIR + 'potato.png', POTATOES: ICON_DIR + 'potato.png',
-  SUGARBEET: ICON_DIR + 'sugarbeet.png', SUGAR_BEET: ICON_DIR + 'sugarbeet.png', REDBEET: ICON_DIR + 'redbeet.png',
+  SUGARBEET: ICON_DIR + 'sugarbeet.png', SUGAR_BEET: ICON_DIR + 'sugarbeet.png', REDBEET: ICON_DIR + 'beetroot.png',
   COTTON: ICON_DIR + 'cotton.png', SUGARCANE: ICON_DIR + 'sugarcane.png', GRASS: ICON_DIR + 'grass.png',
   PEA: ICON_DIR + 'pea.png', SPINACH: ICON_DIR + 'spinach.png', GREENBEAN: ICON_DIR + 'greenbean.png',
   CARROT: ICON_DIR + 'carrot.png', PARSNIP: ICON_DIR + 'parsnip.png', RICE: ICON_DIR + 'rice.png',
   OLIVE: ICON_DIR + 'olive.png', OLIVES: ICON_DIR + 'olive.png', GRAPE: ICON_DIR + 'grape.png', GRAPES: ICON_DIR + 'grape.png',
-  LONG_GRAIN_RICE: ICON_DIR + 'long_grain_rice.png', LONGGRAINRICE: ICON_DIR + 'long_grain_rice.png',
+  LONG_GRAIN_RICE: ICON_DIR + 'ricelonggrain.png', LONGGRAINRICE: ICON_DIR + 'ricelonggrain.png',
   GREEN_BEAN: ICON_DIR + 'greenbean.png', GREEN_BEANS: ICON_DIR + 'greenbean.png', PEAS: ICON_DIR + 'pea.png',
-  CARROTS: ICON_DIR + 'carrot.png', PARSNIPS: ICON_DIR + 'parsnip.png', RED_BEET: ICON_DIR + 'redbeet.png',
+  CARROTS: ICON_DIR + 'carrot.png', PARSNIPS: ICON_DIR + 'parsnip.png', RED_BEET: ICON_DIR + 'beetroot.png',
   SOYBEANS: ICON_DIR + 'soybean.png', SUNFLOWERS: ICON_DIR + 'sunflower.png', SUGAR_CANE: ICON_DIR + 'sugarcane.png',
   HEMP: ICON_DIR + 'hemp.png',
-  RYE: ICON_DIR + 'rye.png', RYE_CUT: ICON_DIR + 'rye.png', RYECUT: ICON_DIR + 'rye.png',
-  CLOVER: ICON_DIR + 'clover.png', CLOVER_WINDROW: ICON_DIR + 'clover.png',
+  RYE: ICON_DIR + 'rye.png', RYE_CUT: ICON_DIR + 'ryecut.png', RYECUT: ICON_DIR + 'ryecut.png',
+  CLOVER: ICON_DIR + 'clover.png', CLOVER_WINDROW: ICON_DIR + 'clover_windrow.png',
   FIELDGRASS: ICON_DIR + 'fieldgrass.png', FIELD_GRASS: ICON_DIR + 'fieldgrass.png',
   GREENRYE: ICON_DIR + 'greenrye.png', GREEN_RYE: ICON_DIR + 'greenrye.png',
   ONION: ICON_DIR + 'onion.png', HOPS: ICON_DIR + 'hops.png', CAULIFLOWER: ICON_DIR + 'cauliflower.png',
-  ASPARAGUS_GREEN: ICON_DIR + 'asparagus_green.png', ASPARAGUSGREEN: ICON_DIR + 'asparagus_green.png', ASPARAGUS_WHITE: ICON_DIR + 'asparagus_white.png', ASPARAGUSWHITE: ICON_DIR + 'asparagus_white.png', CUCUMBER: ICON_DIR + 'cucumber.png'
+  ASPARAGUS_GREEN: ICON_DIR + 'asparagusgreen.png', ASPARAGUSGREEN: ICON_DIR + 'asparagusgreen.png', ASPARAGUS_WHITE: ICON_DIR + 'asparaguswhite.png', ASPARAGUSWHITE: ICON_DIR + 'asparaguswhite.png', CUCUMBER: ICON_DIR + 'cucumber.png'
 };
 const canon = raw => String(raw || '').trim().replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${canon(raw).toLowerCase()}.png`;
+const catalogKey = raw => canon(raw).toLowerCase().replace(/_/g, '');
+const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${catalogKey(raw)}.png`;
 const cropName = raw => i18n[lang].crops[canon(raw)] || i18n.en.crops[canon(raw)] || prettify(raw);
-const cropSpriteCells = {
-  WHEAT:[0,0], BARLEY:[1,0], OAT:[2,0], CANOLA:[3,0], SORGHUM:[4,0], MAIZE:[5,0], CORN:[5,0],
-  SUGARBEET:[0,1], SUGAR_BEET:[0,1], POTATO:[1,1], POTATOES:[1,1], GRASS:[2,1], COTTON:[3,1], SUNFLOWER:[4,1], SUNFLOWERS:[4,1], SUGARCANE:[5,1], SUGAR_CANE:[5,1],
-  OLIVE:[0,2], OLIVES:[0,2], GRAPE:[1,2], GRAPES:[1,2], CARROT:[2,2], CARROTS:[2,2], PARSNIP:[3,2], PARSNIPS:[3,2], REDBEET:[4,2], RED_BEET:[4,2], PEA:[5,2], PEAS:[5,2],
-  SPINACH:[0,3], GREENBEAN:[1,3], GREEN_BEAN:[1,3], GREEN_BEANS:[1,3], SOYBEAN:[2,3], SOYBEANS:[2,3], LONG_GRAIN_RICE:[3,3], LONGGRAINRICE:[3,3], RICE:[4,3]
-};
 const cropImg = (raw, size = 28) => {
-  const key = canon(raw), cell = cropSpriteCells[key];
-  if (cell) return `<span class="crop-sprite" role="img" aria-label="${esc(cropName(key))}" title="${esc(cropName(key))}" style="width:${size}px;height:${size}px;--crop-x:${cell[0] * 20}%;--crop-y:${cell[1] * (100 / 3)}%"></span>`;
-  return `<img src="${cropSrc(key)}" alt="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(key)}" data-size="${size}" decoding="async">`;
+  const key = canon(raw);
+  return `<img src="${cropSrc(key)}" alt="${esc(cropName(key))}" title="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(key)}" data-size="${size}" decoding="sync">`;
 };
 
 /* Built-in SVG fallbacks (24x24, currentColor) */
@@ -563,7 +560,7 @@ const URG_COLOR = { low: 'var(--sky)', medium: 'var(--gold)', high: 'var(--clay)
 const URG_RANK = { high: 0, medium: 1, low: 2 };
 
 let tasks = [];
-let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false };
+let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false, can_view_archive: false, can_edit_archive: false, can_delete_archive: false };
 let currentUser = null, editingTaskId = null, selectedMapVehicle = null;
 
 /* =====================================================================
@@ -575,8 +572,16 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const opName = m => (m.helper ? t('helper', { n: m.helper }) : (m.op || ''));
 const workOn = n => machines.find(m => m.field === n && m.status === 'working');
 const fieldByN = n => fields.find(f => f.n === n);
-let activeStage = 'all', showUnowned = true;
-const visibleFields = () => fields.filter(f => f.owned || showUnowned);
+let activeStage = 'all', activeCrop = 'all', fieldQuery = '', showUnowned = true;
+const visibleFields = () => fields.filter(f => {
+  if (!f.owned && !showUnowned) return false;
+  if (activeStage !== 'all' && String(f.stage) !== activeStage) return false;
+  if (activeCrop !== 'all' && canon(f.crop) !== activeCrop) return false;
+  const query = fieldQuery.trim().toLocaleLowerCase(lang === 'de' ? 'de-DE' : 'en-US');
+  if (!query) return true;
+  const owner = f.ownerName || (f.owned ? (liveFarmName || t('ownFarm')) : t('noOwner'));
+  return [f.n, cropName(f.crop), stageLabel(f.stage), owner].some(value => String(value ?? '').toLocaleLowerCase(lang === 'de' ? 'de-DE' : 'en-US').includes(query));
+});
 
 function renderPlayers() {
   $('players').innerHTML = players.map(p => `<span title="${esc(p.username)} · Online" class="relative inline-flex w-8 h-8 rounded-full" style="border:2px solid var(--bg)">
@@ -641,29 +646,59 @@ function renderLiveMap() {
   const positionedPlayers = gamePlayers.filter(p => mapPosition(p.x, p.z));
   $('liveMapStatus').textContent = t('liveMapCount', { p: gamePlayers.length, v: machines.length });
   if (!positionedFields.length && !positionedMachines.length && !positionedPlayers.length) {
-    markers.innerHTML = `<div class="map-empty">${t('liveMapEmpty')}</div>`;
+    let empty = markers.querySelector('.map-empty');
+    if (!empty) { empty = document.createElement('div'); empty.className = 'map-empty'; markers.replaceChildren(empty); }
+    empty.textContent = t('liveMapEmpty');
     updateLiveMapTransform();
     return;
   }
-  const fieldMarkers = positionedFields.map(f => {
+  markers.querySelector('.map-empty')?.remove();
+  const existing = new Map([...markers.querySelectorAll('[data-marker-key]')].map(marker => [marker.dataset.markerKey, marker]));
+  const used = new Set();
+  const upsert = (key, tag, className) => {
+    let marker = existing.get(key);
+    if (!marker || marker.tagName.toLowerCase() !== tag) {
+      marker?.remove();
+      marker = document.createElement(tag);
+      marker.dataset.markerKey = key;
+      if (tag === 'button') marker.type = 'button';
+      markers.appendChild(marker);
+    }
+    marker.className = className;
+    used.add(key);
+    return marker;
+  };
+  positionedFields.forEach(f => {
     const p = mapPosition(f.x, f.z);
-    return `<button type="button" class="map-object map-field ${f.owned ? 'owned' : ''}" data-field="${f.n}" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(t('fieldN',{n:f.n}) + ' · ' + cropName(f.crop))}">${f.n}</button>`;
-  }).join('');
+    const marker = upsert(`field:${f.n}`, 'button', `map-object map-field ${f.owned ? 'owned' : ''}`);
+    marker.dataset.field = f.n; marker.dataset.mapX = p.left; marker.dataset.mapY = p.top;
+    marker.title = t('fieldN',{n:f.n}) + ' · ' + cropName(f.crop);
+    if (marker.textContent !== String(f.n)) marker.textContent = f.n;
+  });
   const occupiedVehicleIds = new Set(positionedPlayers.map(player => String(player.vehicleId || '')).filter(Boolean));
-  const vehicleMarkers = positionedMachines.filter(machine => !occupiedVehicleIds.has(String(machine.id))).map(m => {
+  positionedMachines.filter(machine => !occupiedVehicleIds.has(String(machine.id))).forEach(m => {
     const p = mapPosition(m.x, m.z);
     const detail = `${m.name}${m.field ? ' · ' + t('fieldN',{n:m.field}) : ''}`;
-    return `<button type="button" class="map-object map-vehicle" data-vehicle-id="${esc(m.id)}" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(detail)}">${svg(ui.tractor,16)}</button>`;
-  }).join('');
-  const playerMarkers = positionedPlayers.map(player => {
+    const marker = upsert(`vehicle:${m.id}`, 'button', 'map-object map-vehicle');
+    marker.dataset.vehicleId = m.id; marker.dataset.mapX = p.left; marker.dataset.mapY = p.top; marker.title = detail;
+    if (!marker.firstElementChild) marker.innerHTML = svg(ui.tractor,16);
+  });
+  positionedPlayers.forEach((player, index) => {
     const p = mapPosition(player.x, player.z);
     const linkedVehicle = player.vehicleName || machines.find(m => m.op && String(m.op).toLowerCase() === String(player.name).toLowerCase())?.name || '';
     const field = player.fieldNumber || machines.find(m => m.name === linkedVehicle)?.field;
     const detail = [linkedVehicle, field ? t('fieldN',{n:field}) : ''].filter(Boolean).join(' · ') || t('yard');
     const initial = String(player.name || '?').trim().charAt(0).toUpperCase() || '?';
-    return `<span class="map-object map-player" data-map-x="${p.left}" data-map-y="${p.top}" title="${esc(player.name + ' · ' + detail)}"><b class="map-player-avatar">${esc(initial)}</b><span>${esc(player.name)}<small>${esc(detail)}</small></span></span>`;
-  }).join('');
-  markers.innerHTML = fieldMarkers + vehicleMarkers + playerMarkers;
+    const key = `player:${player.id || player.userId || player.name || index}`;
+    const marker = upsert(key, 'span', 'map-object map-player');
+    marker.dataset.mapX = p.left; marker.dataset.mapY = p.top; marker.title = player.name + ' · ' + detail;
+    const signature = `${initial}|${player.name}|${detail}`;
+    if (marker.dataset.content !== signature) {
+      marker.innerHTML = `<b class="map-player-avatar">${esc(initial)}</b><span>${esc(player.name)}<small>${esc(detail)}</small></span>`;
+      marker.dataset.content = signature;
+    }
+  });
+  existing.forEach((marker, key) => { if (!used.has(key)) marker.remove(); });
   updateLiveMapTransform();
   if (selectedMapField != null) renderFieldMapInfo(selectedMapField);
   if (selectedMapVehicle != null) renderVehicleMapInfo(selectedMapVehicle);
@@ -671,13 +706,12 @@ function renderLiveMap() {
 
 function cardHTML(f) {
   const color = stageColor[f.stage] || '#B9A97F';
-  const dim = activeStage !== 'all' && activeStage !== f.stage ? ' dim' : '';
   const pct = Math.max(0, Math.min(100, Number(f.pct) || 0));
   const w = f.owned ? workOn(f.n) : null;
   const footer = f.owned
     ? `<span class="g"><span class="truncate">${w ? esc(t(w.task) + ', ' + opName(w)) : t('noActivity')}</span></span>`
     : `<span class="g">${uiSvg('tag')}${t('forSale')}</span><span class="g" style="color:var(--text);font-weight:600">${uiSvg('coin')}${f.price != null ? money(f.price) : t('onRequest')}</span>`;
-  return `<article class="fcard ${f.owned ? 'owned' : 'unowned'}${dim}" data-n="${f.n}" style="--f:${color}">
+  return `<article class="fcard ${f.owned ? 'owned' : 'unowned'}" data-n="${f.n}" style="--f:${color}">
     <div class="row"><span class="num">${f.n}${w ? `<span class="live" title="${t('wip')}"></span>` : ''}</span><span class="ico">${cropImg(f.crop, 28)}</span></div>
     <div class="row"><span class="font-semibold text-[15px] truncate">${esc(cropName(f.crop))}</span><span class="sub" style="opacity:.8">${num1(f.ha)} ha</span></div>
     <div class="row sub"><span class="g"><span class="sd"></span>${esc(stageLabel(f.stage))}</span><span>${pct}%</span></div>
@@ -701,12 +735,20 @@ function renderMap() {
 }
 
 function renderFilters() {
-  if (!fields.length) { $('filters').innerHTML = ''; return; }
-  const list = visibleFields(), counts = {};
-  list.forEach(f => counts[f.stage] = (counts[f.stage] || 0) + 1);
-  const keys = [...STAGE_ORDER, ...Object.keys(counts).filter(k => !STAGE_ORDER.includes(k))];
-  $('filters').innerHTML = `<button type="button" class="chip" data-stage="all" aria-pressed="${activeStage === 'all'}">${t('allFields')} ${list.length}</button>` +
-    keys.map(k => `<button type="button" class="chip" data-stage="${esc(k)}" aria-pressed="${activeStage === k}"><span class="sd" style="--f:${stageColor[k] || '#B9A97F'}"></span>${esc(stageLabel(k))} ${counts[k] || 0}</button>`).join('');
+  const cropSelect = $('fieldCropFilter'), statusSelect = $('fieldStatusFilter');
+  const crops = [...new Set(fields.map(field => canon(field.crop)).filter(Boolean))].sort((a,b) => cropName(a).localeCompare(cropName(b), loc()));
+  const statuses = [...new Set(fields.map(field => String(field.stage || '')).filter(Boolean))];
+  statuses.sort((a,b) => {
+    const ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b);
+    return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi) || stageLabel(a).localeCompare(stageLabel(b), loc());
+  });
+  if (activeCrop !== 'all' && !crops.includes(activeCrop)) activeCrop = 'all';
+  if (activeStage !== 'all' && !statuses.includes(activeStage)) activeStage = 'all';
+  const cropOptions = `<option value="all">${t('filterAllCrops')}</option>` + crops.map(key => `<option value="${esc(key)}">${esc(cropName(key))}</option>`).join('');
+  const statusOptions = `<option value="all">${t('filterAllFieldStatuses')}</option>` + statuses.map(key => `<option value="${esc(key)}">${esc(stageLabel(key))}</option>`).join('');
+  if (cropSelect.innerHTML !== cropOptions) cropSelect.innerHTML = cropOptions;
+  if (statusSelect.innerHTML !== statusOptions) statusSelect.innerHTML = statusOptions;
+  cropSelect.value = activeCrop; statusSelect.value = activeStage;
 }
 
 function renderOps() {
@@ -968,10 +1010,9 @@ $('taskStatusFilter').addEventListener('change', () => renderTasks());
 $('taskTypeFilter').addEventListener('change', () => renderTasks());
 
 /* ---------- Map controls and cross-highlighting ---------- */
-$('filters').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  activeStage = activeStage === b.dataset.stage ? 'all' : b.dataset.stage; renderFilters(); renderMap();
-});
+$('fieldSearch').addEventListener('input', e => { fieldQuery = e.target.value; renderMap(); });
+$('fieldCropFilter').addEventListener('change', e => { activeCrop = e.target.value; renderMap(); });
+$('fieldStatusFilter').addEventListener('change', e => { activeStage = e.target.value; renderMap(); });
 $('tog').addEventListener('click', () => {
   showUnowned = !showUnowned; $('tog').setAttribute('aria-checked', String(showUnowned)); renderFilters(); renderMap();
 });
@@ -1095,7 +1136,7 @@ applyLang();
     }
     authUser.classList.remove('hidden');
     authUser.classList.add('flex');
-    document.getElementById('adminNav').hidden = !currentPermissions.can_manage_users;
+    document.getElementById('adminNav').hidden = !(currentPermissions.can_manage_users || currentPermissions.can_view_archive || currentPermissions.can_edit_archive || currentPermissions.can_delete_archive);
     applyTaskPermissions();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;

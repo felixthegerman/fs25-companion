@@ -106,9 +106,9 @@ Am einfachsten ist GitHub + Render:
 
 ## Admin-Dashboard und Berechtigungen
 
-Der Hauptadmin wird über die feste Discord-ID `1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint nur für berechtigte Nutzer in der Navigation der eigene Bereich **Admin** unter `/admin`. Die Seite wird zusätzlich serverseitig geschützt und kann ohne `Nutzer verwalten` auch nicht direkt über die URL geöffnet werden.
+Der Hauptadmin wird über die feste Discord-ID `1124793204588433518` erkannt und erhält immer alle Rechte. Nach dem Login erscheint nur für berechtigte Nutzer in der Navigation der eigene Bereich **Admin** unter `/admin`. Die Seite wird zusätzlich serverseitig geschützt und kann nur mit `Nutzer verwalten` oder mindestens einem Archiv-Recht direkt geöffnet werden.
 
-Die Discord-ID `1124793204588433518` ist zusätzlich fest im Backend abgesichert. Für diesen Nutzer gelten `approved`, `Aufgaben erstellen`, `Aufgaben löschen` und `Nutzer verwalten` daher immer – unabhängig von alten oder fehlerhaften Berechtigungswerten in der Datenbank.
+Die Discord-ID `1124793204588433518` ist zusätzlich fest im Backend abgesichert. Für diesen Nutzer gelten `approved` und alle modularen Rechte daher immer – unabhängig von alten oder fehlerhaften Berechtigungswerten in der Datenbank.
 
 Dort kann der Hauptadmin:
 
@@ -116,9 +116,17 @@ Dort kann der Hauptadmin:
 - wartende Nutzer annehmen oder ablehnen,
 - bereits freigeschaltete Nutzer sperren,
 - Nutzer wieder auf `wartend` setzen,
-- die Rechte `Aufgaben erstellen`, `Aufgaben löschen` und `Nutzer verwalten` einzeln vergeben.
+- die Rechte `Aufgaben erstellen`, `Aufgaben löschen`, `Nutzer verwalten`, `Archiv ansehen`, `Archiv bearbeiten` und `Archiv endgültig löschen` einzeln vergeben.
 
-Nutzer mit `Nutzer verwalten` dürfen das Admin-Dashboard öffnen und Zugangsstatus ändern. Nur der feste Hauptadmin darf Berechtigungen weitergeben oder entziehen. Aufgaben werden serverseitig in Supabase gespeichert, damit diese Rechte nicht im Browser umgangen werden können.
+Nutzer mit `Nutzer verwalten` dürfen Zugangsstatus ändern. Nutzer mit Archiv-Rechten sehen nur den für sie freigeschalteten Archivbereich. Nur der feste Hauptadmin darf Berechtigungen weitergeben oder entziehen. Aufgaben und Archivänderungen werden serverseitig in Supabase gespeichert, damit diese Rechte nicht im Browser umgangen werden können.
+
+Bei einem bestehenden Deployment genügt für diese neuen Rechte einmalig `supabase/permissions-v2.sql`. Das Skript ist wiederholbar und verändert keine Aufgaben oder Telemetriedaten.
+
+## Feldfrüchte, Symbole und Filter
+
+Die Website enthält den bereitgestellten FS25-Symbolkatalog als browserkompatible PNG-Dateien unter `assets/icons/fs25`. Feldkarten, Ernteübersicht und Finanzkategorien verwenden diese Symbole. Die Feldsuche kann gleichzeitig nach Feldnummer, Frucht oder Besitzer sowie nach Feldfrucht und Status filtern. Frucht- und Statusoptionen werden direkt aus der aktuellen Telemetrie aufgebaut, sodass neue Custom-Map-Früchte automatisch als Filteroption erscheinen. Für noch nicht konvertierbare oder unbekannte Symbole bleibt ein neutrales Pflanzensymbol als Fallback erhalten.
+
+Live-Kartenmarker werden anhand stabiler Feld-, Fahrzeug- und Spieler-IDs aktualisiert. Dadurch bleiben ihre DOM-Elemente zwischen Telemetriepaketen erhalten und blinken nicht mehr bei jedem Update.
 
 ## Finanzen und spätere FS25-Telemetrie
 

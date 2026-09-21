@@ -17,6 +17,9 @@ create table if not exists public.discord_users (
   can_create_tasks boolean not null default false,
   can_delete_tasks boolean not null default false,
   can_manage_users boolean not null default false,
+  can_view_archive boolean not null default false,
+  can_edit_archive boolean not null default false,
+  can_delete_archive boolean not null default false,
   last_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -30,6 +33,9 @@ alter table public.discord_users add column if not exists is_admin boolean not n
 alter table public.discord_users add column if not exists can_create_tasks boolean not null default false;
 alter table public.discord_users add column if not exists can_delete_tasks boolean not null default false;
 alter table public.discord_users add column if not exists can_manage_users boolean not null default false;
+alter table public.discord_users add column if not exists can_view_archive boolean not null default false;
+alter table public.discord_users add column if not exists can_edit_archive boolean not null default false;
+alter table public.discord_users add column if not exists can_delete_archive boolean not null default false;
 alter table public.discord_users add column if not exists last_seen_at timestamptz;
 alter table public.discord_users add column if not exists created_at timestamptz not null default now();
 alter table public.discord_users add column if not exists updated_at timestamptz not null default now();
@@ -52,6 +58,9 @@ set status = 'approved',
     can_create_tasks = true,
     can_delete_tasks = true,
     can_manage_users = true,
+    can_view_archive = true,
+    can_edit_archive = true,
+    can_delete_archive = true,
     updated_at = now()
 where discord_id = '1124793204588433518';
 

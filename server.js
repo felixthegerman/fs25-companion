@@ -136,7 +136,10 @@ function avatarUrl(discordUser) {
 
 function sessionUser(databaseUser) {
     const isSuperAdmin = String(databaseUser.discord_id) === ADMIN_DISCORD_ID;
-    const schemaReady = Object.prototype.hasOwnProperty.call(databaseUser, 'can_manage_users');
+    const schemaReady = Object.prototype.hasOwnProperty.call(databaseUser, 'can_manage_users')
+        && Object.prototype.hasOwnProperty.call(databaseUser, 'can_view_archive')
+        && Object.prototype.hasOwnProperty.call(databaseUser, 'can_edit_archive')
+        && Object.prototype.hasOwnProperty.call(databaseUser, 'can_delete_archive');
     return {
         id: databaseUser.discord_id,
         username: databaseUser.global_name || databaseUser.username,
@@ -150,6 +153,9 @@ function sessionUser(databaseUser) {
             can_create_tasks: isSuperAdmin || Boolean(databaseUser.can_create_tasks),
             can_delete_tasks: isSuperAdmin || Boolean(databaseUser.can_delete_tasks),
             can_manage_users: isSuperAdmin || Boolean(databaseUser.can_manage_users),
+            can_view_archive: isSuperAdmin || Boolean(databaseUser.can_view_archive) || Boolean(databaseUser.can_edit_archive) || Boolean(databaseUser.can_delete_archive),
+            can_edit_archive: isSuperAdmin || Boolean(databaseUser.can_edit_archive),
+            can_delete_archive: isSuperAdmin || Boolean(databaseUser.can_delete_archive),
         },
     };
 }
@@ -175,7 +181,10 @@ function requireApprovedPermission(permission) {
             if (!req.session.user.is_approved) {
                 return res.status(403).json({ error: 'Der Benutzer ist nicht freigeschaltet.' });
             }
-            if (permission && !req.session.user.permissions[permission]) {
+            const allowed = Array.isArray(permission)
+                ? permission.some((key) => req.session.user.permissions[key])
+                : !permission || req.session.user.permissions[permission];
+            if (!allowed) {
                 return res.status(403).json({ error: 'Dafür fehlt die Berechtigung.' });
             }
 
@@ -278,6 +287,9 @@ app.get('/api/auth/callback', async (req, res) => {
             can_create_tasks: isAdmin || Boolean(existingUser?.can_create_tasks),
             can_delete_tasks: isAdmin || Boolean(existingUser?.can_delete_tasks),
             can_manage_users: isAdmin || Boolean(existingUser?.can_manage_users),
+            can_view_archive: isAdmin || Boolean(existingUser?.can_view_archive),
+            can_edit_archive: isAdmin || Boolean(existingUser?.can_edit_archive),
+            can_delete_archive: isAdmin || Boolean(existingUser?.can_delete_archive),
             last_seen_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
         };
@@ -455,7 +467,7 @@ app.get('/api/telemetry/state', requireApprovedPermission(), async (req, res) =>
 app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async (req, res) => {
     const { data: users, error } = await supabase
         .from('discord_users')
-        .select('discord_id,username,global_name,avatar_hash,status,is_admin,can_create_tasks,can_delete_tasks,can_manage_users,created_at,updated_at')
+        .select('discord_id,username,global_name,avatar_hash,status,is_admin,can_create_tasks,can_delete_tasks,can_manage_users,can_view_archive,can_edit_archive,can_delete_archive,created_at,updated_at')
         .order('created_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: 'Benutzer konnten nicht geladen werden.' });
@@ -469,11 +481,39 @@ app.get('/api/admin/users', requireApprovedPermission('can_manage_users'), async
     });
 });
 
-app.get('/api/admin/task-archive', requireApprovedPermission('can_manage_users'), async (req, res) => {
+app.get('/api/admin/task-archive', requireApprovedPermission(['can_view_archive', 'can_edit_archive', 'can_delete_archive']), async (req, res) => {
     const { data: archive, error } = await supabase.from('task_archive').select('*')
         .order('deleted_at', { ascending: false }).limit(500);
     if (error) return res.status(500).json({ error: 'Aufgabenarchiv konnte nicht geladen werden. Bitte supabase/tasks-upgrade.sql ausführen.' });
     res.json({ archive: archive || [] });
+});
+
+app.patch('/api/admin/task-archive/:id', requireApprovedPermission('can_edit_archive'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültiger Archiveintrag.' });
+    const { data: row, error: loadError } = await supabase.from('task_archive').select('task_snapshot').eq('id', id).maybeSingle();
+    if (loadError || !row) return res.status(404).json({ error: 'Archiveintrag wurde nicht gefunden.' });
+    const snapshot = { ...(row.task_snapshot || {}) };
+    if (typeof req.body.task_name === 'string') snapshot.task_name = req.body.task_name.trim().slice(0, 120) || snapshot.task_name;
+    if (req.body.field_number === null || Number.isInteger(Number(req.body.field_number))) snapshot.field_number = req.body.field_number === null ? null : Number(req.body.field_number);
+    if (TASK_TYPES.includes(String(req.body.task_type))) snapshot.task_type = String(req.body.task_type);
+    if (['low', 'medium', 'high'].includes(String(req.body.priority))) snapshot.priority = String(req.body.priority);
+    if (typeof req.body.is_completed === 'boolean') snapshot.is_completed = req.body.is_completed;
+    snapshot.archive_edited_at = new Date().toISOString();
+    snapshot.archive_edited_by = req.session.user.id;
+    const { data: archive, error } = await supabase.from('task_archive').update({ task_snapshot: snapshot }).eq('id', id).select('*').single();
+    if (error) return res.status(500).json({ error: 'Archiveintrag konnte nicht bearbeitet werden.' });
+    broadcast('tasks-changed', { action: 'archive-edited', archiveId: id });
+    res.json({ archive });
+});
+
+app.delete('/api/admin/task-archive/:id', requireApprovedPermission('can_delete_archive'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Ungültiger Archiveintrag.' });
+    const { error } = await supabase.from('task_archive').delete().eq('id', id);
+    if (error) return res.status(500).json({ error: 'Archiveintrag konnte nicht gelöscht werden.' });
+    broadcast('tasks-changed', { action: 'archive-deleted', archiveId: id });
+    res.json({ success: true });
 });
 
 app.patch('/api/admin/users/:discordId/status', requireApprovedPermission('can_manage_users'), async (req, res) => {
@@ -518,13 +558,16 @@ app.patch('/api/admin/users/:discordId/permissions', requireApprovedPermission('
         can_create_tasks: permissions.can_create_tasks === true,
         can_delete_tasks: permissions.can_delete_tasks === true,
         can_manage_users: permissions.can_manage_users === true,
+        can_view_archive: permissions.can_view_archive === true,
+        can_edit_archive: permissions.can_edit_archive === true,
+        can_delete_archive: permissions.can_delete_archive === true,
         updated_at: new Date().toISOString(),
     };
     const { data: user, error } = await supabase
         .from('discord_users')
         .update(update)
         .eq('discord_id', targetDiscordId)
-        .select('discord_id,can_create_tasks,can_delete_tasks,can_manage_users')
+        .select('discord_id,can_create_tasks,can_delete_tasks,can_manage_users,can_view_archive,can_edit_archive,can_delete_archive')
         .single();
 
     if (error) return res.status(500).json({ error: 'Berechtigungen konnten nicht gespeichert werden.' });
@@ -815,7 +858,7 @@ app.get('/api/auth/logout', async (req, res) => {
 });
 
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
-app.get('/admin', requireApprovedPermission('can_manage_users'), (req, res) => {
+app.get('/admin', requireApprovedPermission(['can_manage_users', 'can_view_archive', 'can_edit_archive', 'can_delete_archive']), (req, res) => {
     res.sendFile(path.join(__dirname, 'admin.html'));
 });
 app.get('/admin.html', (req, res) => res.redirect('/admin'));
