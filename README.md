@@ -128,6 +128,8 @@ Die Website enthält den bereitgestellten FS25-Symbolkatalog als browserkompatib
 
 Live-Kartenmarker werden anhand stabiler Feld-, Fahrzeug- und Spieler-IDs aktualisiert. Dadurch bleiben ihre DOM-Elemente zwischen Telemetriepaketen erhalten und blinken nicht mehr bei jedem Update.
 
+Telemetrie-Mod 1.7 überträgt die echten Feldnummern statt der Grundstücksnummern und führt alle Feldquellen einer Custom Map zusammen. Für Hof Bergmann ist zusätzlich der vollständige PDA-Katalog hinterlegt: Feld 1–31, 33–62, 64–70, 74–76 und 78–90. Die auf dieser Karte nicht vorhandenen Nummern 32, 63, 71–73 und 77 werden bewusst nicht erfunden. Der Mod sendet außerdem den vollständigen Fruchttyp-Katalog der gerade geladenen Map inklusive Custom Crops und ihrer lokalisierten Namen. Fahrzeuge und Spieler werden ebenfalls gegen die echten Feldnummern aufgelöst.
+
 ## Finanzen und spätere FS25-Telemetrie
 
 Der Bereich **Finanzen** ist unter `/finances` für jeden freigeschalteten Nutzer erreichbar. Er enthält eine kompakte Übersicht für Kontostand, Einnahmen, Ausgaben und Ergebnis sowie ein detailliertes Buchungsjournal. Kategorien wie Fahrzeugkauf, Auftanken, Wartung und Ernteverkauf sind bereits vorbereitet.

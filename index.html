@@ -497,7 +497,8 @@ const telemetryCropMapping = {
 const canon = raw => String(raw || '').trim().replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const catalogKey = raw => canon(raw).toLowerCase().replace(/_/g, '');
 const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${catalogKey(raw)}.png`;
-const cropName = raw => i18n[lang].crops[canon(raw)] || i18n.en.crops[canon(raw)] || prettify(raw);
+const telemetryCropNames = {};
+const cropName = raw => telemetryCropNames[canon(raw)] || i18n[lang].crops[canon(raw)] || i18n.en.crops[canon(raw)] || prettify(raw);
 const cropImg = (raw, size = 28) => {
   const key = canon(raw);
   return `<img src="${cropSrc(key)}" alt="${esc(cropName(key))}" title="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(key)}" data-size="${size}" decoding="sync">`;
@@ -543,9 +544,15 @@ const uiSvg = (k, s = 14) => svg(ui[k], s).replace('stroke-width="1.5"', 'stroke
 
 /* Telemetry collections stay empty until the FS25 integration is added. */
 const STAGE_ORDER = ['fallow', 'plowed', 'sown', 'growing', 'ready'];
+const KNOWN_FRUIT_TYPES = [
+  'WHEAT','BARLEY','OAT','CANOLA','SORGHUM','MAIZE','SOYBEAN','SUNFLOWER','POTATO','SUGARBEET','COTTON','SUGARCANE','GRASS',
+  'OLIVE','GRAPE','CARROT','PARSNIP','REDBEET','PEA','SPINACH','GREENBEAN','RICE','LONG_GRAIN_RICE',
+  'RYE','RYE_CUT','CLOVER','CLOVER_WINDROW','FIELDGRASS','GREENRYE','ONION','HOPS','CAULIFLOWER','ASPARAGUSGREEN','ASPARAGUSWHITE','CUCUMBER','HEMP','SPELT'
+];
 const stageColor = { fallow: '#B9A97F', plowed: '#D19563', sown: '#E0CB6E', growing: '#9BD46A', ready: '#F2B33D' };
 const stageLabel = k => (i18n[lang]['st_' + k] ?? i18n.en['st_' + k]) || prettify(k);
 let fields = [];
+let availableFruitTypes = [];
 let machines = [];
 let gamePlayers = [];
 let liveMapBounds = { minX: -1024, maxX: 1024, minZ: -1024, maxZ: 1024 };
@@ -736,7 +743,7 @@ function renderMap() {
 
 function renderFilters() {
   const cropSelect = $('fieldCropFilter'), statusSelect = $('fieldStatusFilter');
-  const crops = [...new Set(fields.map(field => canon(field.crop)).filter(Boolean))].sort((a,b) => cropName(a).localeCompare(cropName(b), loc()));
+  const crops = [...new Set([...KNOWN_FRUIT_TYPES, ...availableFruitTypes.map(fruit => canon(fruit.name)), ...fields.map(field => canon(field.crop))].filter(key => key && key !== 'UNKNOWN'))].sort((a,b) => cropName(a).localeCompare(cropName(b), loc()));
   const statuses = [...new Set(fields.map(field => String(field.stage || '')).filter(Boolean))];
   statuses.sort((a,b) => {
     const ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b);
@@ -837,13 +844,19 @@ async function loadTelemetry() {
     const data = await apiRequest('/api/telemetry/state');
     const payload = data.payload;
     if (!payload) return;
+    availableFruitTypes = Array.isArray(payload.fruitTypes) ? payload.fruitTypes.filter(fruit => fruit && fruit.name) : [];
+    Object.keys(telemetryCropNames).forEach(key => delete telemetryCropNames[key]);
+    availableFruitTypes.forEach(fruit => {
+      const key = canon(fruit.name);
+      if (key && fruit.title && String(fruit.title).trim()) telemetryCropNames[key] = String(fruit.title).trim();
+    });
     fields = (payload.fields || []).map(f => ({
       n: Number(f.number ?? f.farmlandId ?? f.id), crop: canon(f.crop || 'UNKNOWN'),
       ha: Number(f.areaHa) || 0, owned: f.owned === true, stage: f.stage || 'fallow',
       pct: Number(f.progress) || 0, eta: f.etaDays == null ? null : Number(f.etaDays), price: f.price == null ? null : Number(f.price),
       x: f.x == null ? null : Number(f.x), z: f.z == null ? null : Number(f.z),
       ownerFarmId: f.ownerFarmId == null ? null : Number(f.ownerFarmId), ownerName: f.ownerName || null
-    })).filter(f => Number.isFinite(f.n));
+    })).filter(f => Number.isFinite(f.n)).sort((a,b) => a.n - b.n);
     machines = (payload.vehicles || []).map(v => ({
       id: v.id, name: v.name || 'Fahrzeug', type: v.type || 'Fahrzeug', kind: v.kind || 'tractor',
       field: v.fieldNumber == null ? null : Number(v.fieldNumber), status: v.status || 'idle',
@@ -865,7 +878,7 @@ async function loadTelemetry() {
 
 function renderForm() {
   const sel = $('fField'), cur = sel.value;
-  sel.innerHTML = `<option value="">${t('yard')}</option>` + fields.filter(f => f.owned).map(f => `<option value="${f.n}">${t('fieldN', { n: f.n })}, ${esc(cropName(f.crop))}</option>`).join('');
+  sel.innerHTML = `<option value="">${t('yard')}</option>` + fields.map(f => `<option value="${f.n}">${t('fieldN', { n: f.n })}, ${esc(cropName(f.crop))}${f.owned ? '' : ` · ${esc(t('noOwner'))}`}</option>`).join('');
   sel.value = cur;
   $('taskList').innerHTML = PRESETS.map(k => `<option value="${esc(t(k))}"></option>`).join('');
   const currentType = $('fType').value || 'field';
