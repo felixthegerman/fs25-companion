@@ -89,6 +89,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .fcard.unowned .num { color: #c9c2b3; }
   .ico { display: flex; width: 28px; height: 28px; align-items: center; justify-content: center; }
   .ico img { width: 28px; height: 28px; object-fit: contain; }
+  .crop-sprite { display:inline-block; flex:none; border-radius:5px; background-image:url('/assets/icons/fs25-crop-sprite.png'); background-repeat:no-repeat; background-size:600% 400%; background-position:var(--crop-x) var(--crop-y); image-rendering:auto; }
   .fcard.owned .ico { color: rgba(241,246,236,.95); }
   .fcard.unowned .ico { color: rgba(162,155,139,.75); }
   .fcard.unowned .ico img { filter: grayscale(1) opacity(.7); }
@@ -493,8 +494,17 @@ const telemetryCropMapping = {
 const canon = raw => String(raw || '').trim().replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${canon(raw).toLowerCase()}.png`;
 const cropName = raw => i18n[lang].crops[canon(raw)] || i18n.en.crops[canon(raw)] || prettify(raw);
-const cropImg = (raw, size = 28) =>
-  `<img src="${cropSrc(raw)}" alt="${esc(cropName(raw))}" width="${size}" height="${size}" data-crop="${esc(canon(raw))}" data-size="${size}" decoding="async">`;
+const cropSpriteCells = {
+  WHEAT:[0,0], BARLEY:[1,0], OAT:[2,0], CANOLA:[3,0], SORGHUM:[4,0], MAIZE:[5,0], CORN:[5,0],
+  SUGARBEET:[0,1], SUGAR_BEET:[0,1], POTATO:[1,1], POTATOES:[1,1], GRASS:[2,1], COTTON:[3,1], SUNFLOWER:[4,1], SUNFLOWERS:[4,1], SUGARCANE:[5,1], SUGAR_CANE:[5,1],
+  OLIVE:[0,2], OLIVES:[0,2], GRAPE:[1,2], GRAPES:[1,2], CARROT:[2,2], CARROTS:[2,2], PARSNIP:[3,2], PARSNIPS:[3,2], REDBEET:[4,2], RED_BEET:[4,2], PEA:[5,2], PEAS:[5,2],
+  SPINACH:[0,3], GREENBEAN:[1,3], GREEN_BEAN:[1,3], GREEN_BEANS:[1,3], SOYBEAN:[2,3], SOYBEANS:[2,3], LONG_GRAIN_RICE:[3,3], LONGGRAINRICE:[3,3], RICE:[4,3]
+};
+const cropImg = (raw, size = 28) => {
+  const key = canon(raw), cell = cropSpriteCells[key];
+  if (cell) return `<span class="crop-sprite" role="img" aria-label="${esc(cropName(key))}" title="${esc(cropName(key))}" style="width:${size}px;height:${size}px;--crop-x:${cell[0] * 20}%;--crop-y:${cell[1] * (100 / 3)}%"></span>`;
+  return `<img src="${cropSrc(key)}" alt="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(key)}" data-size="${size}" decoding="async">`;
+};
 
 /* Built-in SVG fallbacks (24x24, currentColor) */
 const n2 = v => +v.toFixed(2);
