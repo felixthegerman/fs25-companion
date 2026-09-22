@@ -342,8 +342,9 @@ tailwind.config = { theme: { extend: { fontFamily: {
 
   <!-- Machines -->
   <section id="machines" class="panel p-4 sm:p-5" aria-labelledby="mach-h">
-    <div class="flex items-baseline justify-between gap-2 mb-3">
-      <h2 id="mach-h" class="h2" data-i18n="machTitle"></h2><p id="mach-sum" class="muted text-sm"></p>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div><h2 id="mach-h" class="h2" data-i18n="machTitle"></h2><p id="mach-sum" class="muted text-sm mt-1"></p></div>
+      <select id="vehicleBrandFilter" class="inp" style="width:min(100%,240px)" data-i18n-aria="vehicleBrandFilterAria"></select>
     </div>
     <ul id="machList" class="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-4"></ul>
   </section>
@@ -371,7 +372,7 @@ const i18n = {
     telemetryEmpty: 'No telemetry data available yet.', fieldsEmpty: 'Fields will appear here after the FS25 telemetry integration.', machinesEmpty: 'Machines will appear here after the FS25 telemetry integration.',
     opsTitle: 'Active operations queue', opsSum: '{n} active', opsEmpty: 'No telemetry data available yet.',
     yieldTitle: 'Yield readiness tracker', yieldSum: '{n} fields ready to harvest now. Next to mature:', dayOne: '{n} day', dayMany: '{n} days',
-    machTitle: 'Machines out in the field', machSum: '{a} active, {i} idle',
+    machTitle: 'Machines out in the field', machSum: '{a} active, {i} idle', filterAllBrands: 'All brands', vehicleBrandFilterAria: 'Filter vehicles by brand', unknownBrand: 'Unknown brand',
     s_working: 'Working', s_hauling: 'On the road', s_idle: 'Idle', onRoad: 'On the road', inYard: 'In the yard', helper: 'AI helper {n}',
     ty_plow: 'Tractor with plow', ty_combine: 'Combine harvester', ty_seeder: 'Tractor with seeder', ty_forage: 'Forage harvester',
     ty_cult: 'Tractor with cultivator', ty_truck: 'Grain truck', ty_baler: 'Tractor with baler', ty_tractor: 'Tractor',
@@ -415,7 +416,7 @@ const i18n = {
     telemetryEmpty: 'Noch keine Telemetriedaten verfügbar.', fieldsEmpty: 'Felder erscheinen hier nach der FS25-Telemetrieintegration.', machinesEmpty: 'Maschinen erscheinen hier nach der FS25-Telemetrieintegration.',
     opsTitle: 'Aktive Arbeitsaufträge', opsSum: '{n} aktiv', opsEmpty: 'Noch keine Telemetriedaten verfügbar.',
     yieldTitle: 'Ernte-Bereitschaft', yieldSum: '{n} Felder sind jetzt erntereif. Als Nächstes reif:', dayOne: '{n} Tag', dayMany: '{n} Tage',
-    machTitle: 'Maschinen im Einsatz auf dem Feld', machSum: '{a} aktiv, {i} im Leerlauf',
+    machTitle: 'Maschinen im Einsatz auf dem Feld', machSum: '{a} aktiv, {i} im Leerlauf', filterAllBrands: 'Alle Marken', vehicleBrandFilterAria: 'Fahrzeuge nach Marke filtern', unknownBrand: 'Unbekannte Marke',
     s_working: 'Arbeitet', s_hauling: 'Unterwegs', s_idle: 'Leerlauf', onRoad: 'Unterwegs', inYard: 'Auf dem Hof', helper: 'KI-Helfer {n}',
     ty_plow: 'Traktor mit Pflug', ty_combine: 'Mähdrescher', ty_seeder: 'Traktor mit Sämaschine', ty_forage: 'Feldhäcksler',
     ty_cult: 'Traktor mit Grubber', ty_truck: 'Getreide-LKW', ty_baler: 'Traktor mit Ballenpresse', ty_tractor: 'Traktor',
@@ -580,6 +581,7 @@ const URG_RANK = { high: 0, medium: 1, low: 2 };
 let tasks = [];
 let currentPermissions = { can_create_tasks: false, can_delete_tasks: false, can_manage_users: false, can_view_archive: false, can_edit_archive: false, can_delete_archive: false };
 let currentUser = null, editingTaskId = null, selectedMapVehicle = null;
+let activeVehicleBrand = 'all';
 
 /* =====================================================================
    4. RENDERING
@@ -796,21 +798,29 @@ function renderYield() {
 }
 
 function renderMachines() {
+  const brandFilter = $('vehicleBrandFilter');
+  const brands = [...new Set(machines.map(machine => String(machine.brand || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, loc()));
+  if (activeVehicleBrand !== 'all' && !brands.includes(activeVehicleBrand)) activeVehicleBrand = 'all';
+  const brandOptions = `<option value="all">${esc(t('filterAllBrands'))}</option>` + brands.map(brand => `<option value="${esc(brand)}">${esc(brand)}</option>`).join('');
+  if (brandFilter.innerHTML !== brandOptions) brandFilter.innerHTML = brandOptions;
+  brandFilter.value = activeVehicleBrand;
   if (!machines.length) {
     $('machList').innerHTML = `<li class="muted text-sm text-center" style="grid-column:1/-1;padding:28px 12px">${t('machinesEmpty')}</li>`;
     $('mach-sum').textContent = t('telemetryEmpty');
     return;
   }
-  $('machList').innerHTML = machines.map(m => {
+  const visibleMachines = activeVehicleBrand === 'all' ? machines : machines.filter(machine => machine.brand === activeVehicleBrand);
+  $('machList').innerHTML = visibleMachines.length ? visibleMachines.map(m => {
     const who = opName(m), loc2 = m.field ? `<span class="pill on">${t('fieldN', { n: m.field })}</span>` : `<span class="pill muted">${t(m.status === 'hauling' ? 'onRoad' : 'inYard')}</span>`;
     return `<li class="mcard hit" tabindex="0" data-vehicle-id="${esc(m.id)}" ${m.field ? `data-field="${m.field}"` : ''}><span class="tile" style="color:var(--text)">${svg(ui[m.kind] || ui.tractor, 22)}</span>
       <div class="min-w-0 flex-1"><div class="font-semibold text-sm truncate">${esc(m.name)}</div>
-      <div class="muted text-xs truncate">${esc(t(m.type))}</div><div class="muted text-xs truncate">${esc(t(m.task) + (who ? ', ' + who : ''))}</div>
+      <div class="muted text-xs truncate">${esc(m.brand || t('unknownBrand'))} · ${esc(t(m.type))}</div><div class="muted text-xs truncate">${esc(t(m.task) + (who ? ', ' + who : ''))}</div>
       <div class="text-xs mt-1 flex items-center gap-1.5"><span class="dot" style="--d:${STATUS_DOT[m.status]}"></span>${t('s_' + m.status)}</div></div>${loc2}</li>`;
-  }).join('');
-  const act = machines.filter(m => m.status !== 'idle').length;
-  $('mach-sum').textContent = t('machSum', { a: act, i: machines.length - act });
+  }).join('') : `<li class="muted text-sm text-center" style="grid-column:1/-1;padding:28px 12px">${t('machinesEmpty')}</li>`;
+  const act = visibleMachines.filter(m => m.status !== 'idle').length;
+  $('mach-sum').textContent = t('machSum', { a: act, i: visibleMachines.length - act });
 }
+$('vehicleBrandFilter').addEventListener('change', event => { activeVehicleBrand = event.target.value; renderMachines(); });
 $('machList').addEventListener('click', e => {
   const card = e.target.closest('[data-vehicle-id]');
   if (!card) return;

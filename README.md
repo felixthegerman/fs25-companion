@@ -128,6 +128,8 @@ Die Website enthält den bereitgestellten FS25-Symbolkatalog als browserkompatib
 
 Live-Kartenmarker werden anhand stabiler Feld-, Fahrzeug- und Spieler-IDs aktualisiert. Dadurch bleiben ihre DOM-Elemente zwischen Telemetriepaketen erhalten und blinken nicht mehr bei jedem Update.
 
+Der Maschinenbereich besitzt einen dynamischen Markenfilter. Die Optionen werden aus allen aktuell übertragenen Fahrzeugen erzeugt und unterstützen deshalb auch Marken aus Fahrzeug-Mods. Telemetrie-Mod 1.7.2 liest die Marke sowohl direkt vom Fahrzeug als auch ersatzweise aus Store-Item und Brand-Manager aus.
+
 Telemetrie-Mod 1.7.1 überträgt die echten Feldnummern statt der Grundstücksnummern und führt alle Feldquellen einer Custom Map zusammen. Für Hof Bergmann ist zusätzlich der vollständige PDA-Katalog hinterlegt: Feld 1–31, 33–62, 64–70, 74–76 und 78–90. Die auf dieser Karte nicht vorhandenen Nummern 32, 63, 71–73 und 77 werden bewusst nicht erfunden. Der Mod liest den aktuellen Bewuchs über FS25 `FieldState` direkt aus den Density Maps. Dadurch werden Hof-Bergmann- und andere Custom Crops nicht mehr als `UNKNOWN` behandelt. Zusätzlich sendet er den vollständigen Fruchttyp-Katalog mit internem Fruit-Type, zugehörigem Fill-Type und lokalisiertem Namen. Fahrzeuge und Spieler werden ebenfalls gegen die echten Feldnummern aufgelöst.
 
 ## Finanzen und spätere FS25-Telemetrie
