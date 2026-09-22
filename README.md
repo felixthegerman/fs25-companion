@@ -146,6 +146,12 @@ Das SQL-Skript legt außerdem `website_sessions` an. Dadurch bleibt die Discord-
 
 Die Integration besteht aus dem Ingame-Mod `FS25_CompanionTelemetry.zip` und der lokalen Telemetrie-Bridge. FS25-Mods können aus der Lua-Sandbox keine beliebigen sicheren POST-Anfragen an externe Websites senden. Der Mod exportiert deshalb alle zehn Sekunden Felder, Frucht und Wachstumsstand, eigene Fahrzeuge, deren Status, Farmkonto und Finanzereignisse lokal. Die Bridge überträgt diese Datei mit einem eigenen, widerrufbaren Token an die Website.
 
+### Mehrere Höfe und Karten
+
+Im Adminbereich kann unter **FS25-Telemetrie koppeln** für jeden Spielstand ein eigener Hofname und Kopplungscode erzeugt werden. Jeder Hof benötigt eine separat entpackte Bridge mit eigener `config.json`; dadurch können auch mehrere Spielstände oder Server gleichzeitig verbunden bleiben. Im Dashboard wählt man den Hof oben rechts aus. Felder, Spieler, Fahrzeuge, Kartenpositionen und Live-Status werden ausschließlich aus der gewählten Telemetriequelle angezeigt.
+
+Die Hof-Bergmann-Karte wird automatisch erkannt. Weitere Kartenbilder können als PNG unter `assets/maps` hinterlegt werden. Der Dateiname entspricht dem von FS25 gemeldeten Kartennamen in Kleinbuchstaben, wobei Leer- und Sonderzeichen durch Bindestriche ersetzt werden, zum Beispiel `Riverbend Springs` → `riverbend-springs.png`. Ist noch kein passendes Kartenbild vorhanden, erscheint die neutrale Kartenfläche, während sämtliche Marker und Live-Daten weiterhin funktionieren.
+
 1. Diese Website-Version deployen und `supabase/schema.sql` ausführen.
 2. `FS25_CompanionTelemetry.zip` unverändert in `Documents/My Games/FarmingSimulator2025/mods` kopieren.
 3. Den Mod beim Laden des gewünschten Spielstands aktivieren.

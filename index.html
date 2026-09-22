@@ -50,7 +50,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
   .live-map-card { position: relative; width: min(100%, 820px); aspect-ratio: 1/1; margin-inline: auto; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background:#22251d; cursor: grab; touch-action: none; }
   .live-map-card.dragging { cursor: grabbing; }
   .live-map-card::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 70px rgba(0,0,0,.36); }
-  .live-map-world { position: absolute; inset: 0; transform-origin: 0 0; background-image: linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('/assets/hof-bergmann-map.png'); background-size: 200% 200%; background-position: center; background-repeat: no-repeat; will-change: transform; }
+  .live-map-world { position: absolute; inset: 0; transform-origin: 0 0; background-image: linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('/assets/map-background.svg'); background-size: 100% 100%; background-position: center; background-repeat: no-repeat; will-change: transform; }
   .live-map-markers { position: absolute; inset: 0; z-index: 5; overflow: hidden; pointer-events: none; }
   .map-object { position: absolute; z-index: 2; transform: translate(-50%,-50%); }
   .live-map-markers .map-object { transform: translate(-50%,-50%) scale(var(--marker-scale,1)); transform-origin: center; pointer-events: auto; will-change: left,top,transform; }
@@ -239,9 +239,10 @@ tailwind.config = { theme: { extend: { fontFamily: {
 
 <div id="dashboardRoot" class="mx-auto max-w-[1400px] px-4 sm:px-6 py-6">
 
-  <div class="mb-5">
-    <h1 id="farmTitle" class="font-display text-3xl sm:text-4xl font-bold tracking-tight">FS25 Farm-Dashboard</h1>
-    <p id="farmSub" class="muted mt-1 text-sm" data-i18n="sub"></p>
+  <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div><h1 id="farmTitle" class="font-display text-3xl sm:text-4xl font-bold tracking-tight">FS25 Farm-Dashboard</h1>
+    <p id="farmSub" class="muted mt-1 text-sm" data-i18n="sub"></p></div>
+    <div style="width:min(100%,300px)"><label class="lbl" for="farmSelector" data-i18n="selectFarm"></label><select id="farmSelector" class="inp"></select></div>
   </div>
 
   <!-- Map + sidebar -->
@@ -359,7 +360,7 @@ tailwind.config = { theme: { extend: { fontFamily: {
    ===================================================================== */
 const i18n = {
   en: {
-    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', navFinances: 'Finances', navAdmin: 'Admin', langLabel: 'Language',
+    navMap: 'Field map', navMachines: 'Machines', navTasks: 'Tasks', navFinances: 'Finances', navAdmin: 'Admin', langLabel: 'Language', selectFarm: 'Farm dashboard', noFarms: 'No farms connected',
     sub: 'FS25 telemetry is not connected yet.',
     balance: 'Farm balance', income: 'Income this week', maint: 'Maintenance costs', net: 'Net this week',
     chartCap: 'Daily income and maintenance, days 8 to 14', chartAria: 'Bar chart of daily income and maintenance costs',
@@ -403,7 +404,7 @@ const i18n = {
       RYE: 'Rye', RYE_CUT: 'Cut rye', RYECUT: 'Cut rye', CLOVER: 'Clover', FIELDGRASS: 'Field grass', FIELD_GRASS: 'Field grass', GREENRYE: 'Green rye', GREEN_RYE: 'Green rye', ONION: 'Onions', HOPS: 'Hops', CAULIFLOWER: 'Cauliflower', ASPARAGUSGREEN: 'Green asparagus', ASPARAGUSWHITE: 'White asparagus', ASPARAGUS_GREEN: 'Green asparagus', ASPARAGUS_WHITE: 'White asparagus', CUCUMBER: 'Cucumbers' }
   },
   de: {
-    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navFinances: 'Finanzen', navAdmin: 'Admin', langLabel: 'Sprache',
+    navMap: 'Feldkarte', navMachines: 'Maschinen', navTasks: 'Aufgaben', navFinances: 'Finanzen', navAdmin: 'Admin', langLabel: 'Sprache', selectFarm: 'Hof-Dashboard', noFarms: 'Noch kein Hof gekoppelt',
     sub: 'Die FS25-Telemetrie ist noch nicht verbunden.',
     balance: 'Kontostand', income: 'Einnahmen diese Woche', maint: 'Wartungskosten', net: 'Ergebnis diese Woche',
     chartCap: 'Tägliche Einnahmen und Wartung, Tag 8 bis 14', chartAria: 'Balkendiagramm der täglichen Einnahmen und Wartungskosten',
@@ -567,6 +568,10 @@ let fields = [];
 let availableFruitTypes = [];
 let machines = [];
 let gamePlayers = [];
+let telemetryFarms = [];
+let selectedFarmId = String(store.get('selectedFarmId') || '');
+let currentMapName = '';
+const mapAssetCache = new Map();
 let liveMapBounds = { minX: -1024, maxX: 1024, minZ: -1024, maxZ: 1024 };
 let liveMapZoom = 1, liveMapPanX = 0, liveMapPanY = 0;
 let selectedMapField = null, liveFarmName = '';
@@ -860,11 +865,79 @@ async function loadTasks() {
   }
 }
 
+function renderFarmSelector() {
+  const select = $('farmSelector');
+  if (!select) return;
+  const options = telemetryFarms.map(farm => {
+    const label = farm.name || farm.farm_name || farm.map_name || 'FS25 Hof';
+    const detail = farm.map_name && !label.toLowerCase().includes(String(farm.map_name).toLowerCase()) ? ` · ${farm.map_name}` : '';
+    return `<option value="${esc(farm.id)}">${farm.connected ? '● ' : '○ '}${esc(label + detail)}</option>`;
+  }).join('');
+  select.innerHTML = options || `<option value="">${esc(t('noFarms'))}</option>`;
+  select.disabled = !telemetryFarms.length;
+  if (telemetryFarms.some(farm => farm.id === selectedFarmId)) select.value = selectedFarmId;
+}
+
+async function loadFarms() {
+  try {
+    const data = await apiRequest('/api/telemetry/farms');
+    telemetryFarms = data.farms || [];
+    if (!telemetryFarms.some(farm => farm.id === selectedFarmId)) selectedFarmId = telemetryFarms[0]?.id || '';
+    store.set('selectedFarmId', selectedFarmId || null);
+    renderFarmSelector();
+    return selectedFarmId;
+  } catch (error) {
+    console.warn('Höfe konnten nicht geladen werden:', error.message);
+    return selectedFarmId;
+  }
+}
+
+function mapAssetSlug(name) {
+  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function setMapBackground(mapName) {
+  const world = $('liveMapWorld');
+  if (!world) return;
+  currentMapName = String(mapName || '');
+  const fallback = '/assets/map-background.svg';
+  const apply = url => { world.style.backgroundImage = `linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('${url}')`; };
+  if (/hof\s*bergmann/i.test(currentMapName)) { apply('/assets/hof-bergmann-map.png'); return; }
+  const slug = mapAssetSlug(currentMapName);
+  if (!slug) { apply(fallback); return; }
+  if (mapAssetCache.has(slug)) { apply(mapAssetCache.get(slug)); return; }
+  apply(fallback);
+  const candidate = `/assets/maps/${slug}.png`;
+  const image = new Image();
+  image.onload = () => { mapAssetCache.set(slug, candidate); if (mapAssetSlug(currentMapName) === slug) apply(candidate); };
+  image.onerror = () => mapAssetCache.set(slug, fallback);
+  image.src = candidate;
+}
+
+function clearTelemetryView() {
+  fields = []; availableFruitTypes = []; machines = []; gamePlayers = [];
+  liveFarmName = ''; selectedMapField = null; selectedMapVehicle = null;
+  $('fieldMapInfo').hidden = true; $('vehicleMapInfo').hidden = true;
+  setMapBackground('');
+  const selectedFarm = telemetryFarms.find(farm => farm.id === selectedFarmId);
+  $('farmTitle').textContent = selectedFarm?.name || selectedFarm?.farm_name || t('noFarms');
+  $('farmSub').textContent = selectedFarm ? `${selectedFarm.map_name || 'FS25'} · ${t('telemetryEmpty')}` : t('telemetryEmpty');
+  renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm();
+}
+
 async function loadTelemetry() {
   try {
-    const data = await apiRequest('/api/telemetry/state');
+    if (!selectedFarmId) await loadFarms();
+    if (!selectedFarmId) { clearTelemetryView(); return; }
+    const data = await apiRequest(`/api/telemetry/state?sourceId=${encodeURIComponent(selectedFarmId)}`);
     const payload = data.payload;
-    if (!payload) return;
+    if (!payload) { clearTelemetryView(); return; }
+    if (data.source_id && data.source_id !== selectedFarmId) {
+      selectedFarmId = data.source_id;
+      store.set('selectedFarmId', selectedFarmId);
+      renderFarmSelector();
+    }
     availableFruitTypes = Array.isArray(payload.fruitTypes) ? payload.fruitTypes.filter(fruit => fruit && fruit.name) : [];
     Object.keys(telemetryCropNames).forEach(key => delete telemetryCropNames[key]);
     Object.keys(telemetryCropAliases).forEach(key => delete telemetryCropAliases[key]);
@@ -902,7 +975,9 @@ async function loadTelemetry() {
     }));
     if (payload.mapBounds) liveMapBounds = payload.mapBounds;
     liveFarmName = payload.farm?.name || payload.savegame?.name || '';
-    if (payload.savegame?.name || payload.savegame?.mapName) $('farmTitle').textContent = payload.savegame.name || payload.savegame.mapName;
+    const selectedFarm = telemetryFarms.find(farm => farm.id === selectedFarmId);
+    $('farmTitle').textContent = selectedFarm?.name || payload.savegame?.name || payload.farm?.name || payload.savegame?.mapName || 'FS25 Hof';
+    setMapBackground(payload.savegame?.mapName);
     $('farmSub').textContent = `${payload.savegame?.mapName || 'FS25'} · ${data.connected ? 'Live verbunden' : 'Telemetrie zuletzt empfangen'}${data.last_seen_at ? ` · ${new Date(data.last_seen_at).toLocaleString(loc())}` : ''}`;
     renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm();
   } catch (error) { console.warn('Telemetrie konnte nicht geladen werden:', error.message); }
@@ -1127,8 +1202,15 @@ function applyLang() {
   $('lang').dataset.lang = lang;
   document.querySelectorAll('#lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
   $('fErr').textContent = '';
-  renderPlayers(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
+  renderPlayers(); renderFarmSelector(); renderFilters(); renderMap(); renderOps(); renderYield(); renderMachines(); renderForm(); renderTasks();
 }
+$('farmSelector').addEventListener('change', async event => {
+  selectedFarmId = event.target.value;
+  store.set('selectedFarmId', selectedFarmId || null);
+  selectedMapField = null; selectedMapVehicle = null;
+  liveMapZoom = 1; liveMapPanX = 0; liveMapPanY = 0;
+  await loadTelemetry();
+});
 $('lang').addEventListener('click', e => {
   const b = e.target.closest('button[data-lang]'); if (!b || b.dataset.lang === lang) return;
   lang = b.dataset.lang; store.set('lang', lang); applyLang();
@@ -1186,7 +1268,7 @@ applyLang();
     document.body.classList.remove('auth-locked');
     gate.hidden = true;
     loadTasks();
-    loadTelemetry();
+    loadFarms().then(loadTelemetry);
     loadAssignableUsers();
     startPresence();
     startRealtime();
@@ -1232,7 +1314,13 @@ applyLang();
     eventStream.addEventListener('tasks-changed', () => loadTasks());
     eventStream.addEventListener('presence-changed', () => loadOnlineUsers());
     eventStream.addEventListener('users-changed', () => loadAssignableUsers());
-    eventStream.addEventListener('telemetry-changed', () => loadTelemetry());
+    eventStream.addEventListener('telemetry-changed', event => {
+      let change = {};
+      try { change = JSON.parse(event.data || '{}'); } catch (_) {}
+      if (change.action || !telemetryFarms.some(farm => farm.id === change.sourceId)) {
+        loadFarms().then(() => { if (!change.sourceId || change.sourceId === selectedFarmId || change.action === 'deleted') loadTelemetry(); });
+      } else if (!change.sourceId || change.sourceId === selectedFarmId) loadTelemetry();
+    });
     eventStream.onerror = () => console.warn('Live-Verbindung wird automatisch neu aufgebaut.');
     taskSyncTimer = window.setInterval(loadTasks, 15000);
   }

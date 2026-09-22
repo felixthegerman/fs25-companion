@@ -75,7 +75,14 @@
     .archive-meta { color:var(--muted); font-size:12px; }
     .archive-json { margin:0; padding:14px; border-top:1px solid var(--line); color:#d5cfbf; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow:auto; }
     .archive-controls { display:flex; justify-content:flex-end; gap:7px; padding:0 14px 12px; }
-    @media(max-width:760px){ .nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:29px}.page-head{align-items:flex-start;flex-direction:column}.search{max-width:none;width:100%} }
+    .farm-create { display:flex; gap:9px; align-items:center; flex-wrap:wrap; }
+    .farm-create .search { min-width:230px; }
+    .farm-list { display:grid; gap:8px; margin-top:14px; }
+    .farm-row { display:grid; grid-template-columns:minmax(180px,1fr) minmax(160px,1fr) 120px auto; gap:12px; align-items:center; padding:11px 12px; border:1px solid var(--line); border-radius:9px; background:var(--panel2); }
+    .farm-row strong,.farm-row span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .farm-state { color:var(--muted); font-size:12px; }
+    .farm-state.live { color:var(--lime); }
+    @media(max-width:760px){ .nav-inner,main{padding-left:14px;padding-right:14px}.nav-links{display:none}.account-name{display:none}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:29px}.page-head{align-items:flex-start;flex-direction:column}.search{max-width:none;width:100%}.farm-row{grid-template-columns:1fr}.farm-create,.farm-create .search{width:100%} }
     @media(max-width:760px){ .archive-summary{grid-template-columns:1fr 100px}.archive-summary .archive-wide{display:none} }
   </style>
 </head>
@@ -107,9 +114,10 @@
     <section id="telemetryPanel" class="panel" style="padding:18px;margin-bottom:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div><h2 style="margin:0;font-family:'Barlow Condensed',sans-serif">FS25-Telemetrie koppeln</h2><p class="muted" style="margin:5px 0 0;font-size:13px">Erzeuge einen 15 Minuten gültigen Code für die Telemetrie-Bridge.</p></div>
-        <button id="pairTelemetry" class="btn" type="button">Kopplungscode erzeugen</button>
+        <div class="farm-create"><input id="newFarmName" class="search" type="text" maxlength="80" placeholder="Name des neuen Hofs"><button id="pairTelemetry" class="btn" type="button">Hof koppeln</button></div>
       </div>
       <div id="pairingResult" hidden style="margin-top:14px;padding:13px;border-radius:9px;background:var(--panel2)">Code: <strong id="pairingCode" style="font-size:24px;letter-spacing:4px;color:var(--lime)"></strong><span class="muted" style="margin-left:12px;font-size:12px">In der Bridge eingeben.</span></div>
+      <div id="farmSources" class="farm-list"><div class="empty">Höfe werden geladen …</div></div>
     </section>
 
     <section id="usersPanel" class="panel">
@@ -146,6 +154,7 @@
     let currentUser = null;
     let users = [];
     let archivedTasks = [];
+    let telemetryFarms = [];
     let presenceTimer = null;
     let eventStream = null;
 
@@ -206,6 +215,17 @@
       try { const data=await api('/api/admin/task-archive'); archivedTasks=data.archive||[]; renderArchive(); }
       catch(error){ document.getElementById('taskArchive').innerHTML=`<div class="empty">${esc(error.message)}</div>`; }
     }
+    function renderFarms() {
+      document.getElementById('farmSources').innerHTML=telemetryFarms.map(farm=>{
+        const last=farm.last_seen_at?new Date(farm.last_seen_at).toLocaleString('de-DE'):'Noch keine Daten';
+        return `<div class="farm-row" data-farm-id="${esc(farm.id)}"><strong>${esc(farm.name||farm.farm_name||'FS25 Hof')}</strong><span class="muted">${esc(farm.map_name||'Karte noch unbekannt')}</span><span class="farm-state ${farm.connected?'live':''}">${farm.connected?'● Live':'○ Offline'} · ${esc(last)}</span><span class="actions"><button class="action" type="button" data-farm-rename>Umbenennen</button><button class="action block" type="button" data-farm-delete>Entfernen</button></span></div>`;
+      }).join('')||'<div class="empty">Noch kein Hof gekoppelt. Erzeuge oben den ersten Kopplungscode.</div>';
+    }
+    async function loadFarms() {
+      if(!currentUser?.permissions?.can_manage_users)return;
+      try { const data=await api('/api/telemetry/farms');telemetryFarms=data.farms||[];renderFarms(); }
+      catch(error){document.getElementById('farmSources').innerHTML=`<div class="empty">${esc(error.message)}</div>`;}
+    }
     async function updatePresence() {
       try { await api('/api/presence',{method:'POST'}); } catch (error) { console.warn(error.message); }
     }
@@ -219,6 +239,7 @@
       eventStream=new EventSource('/api/events');
       eventStream.addEventListener('users-changed',loadUsers);
       eventStream.addEventListener('tasks-changed',loadTaskArchive);
+      eventStream.addEventListener('telemetry-changed',loadFarms);
     }
     document.getElementById('users').addEventListener('click', async event => {
       const row=event.target.closest('[data-user-id]'); if(!row)return;
@@ -249,9 +270,22 @@
         await loadTaskArchive();
       }catch(error){setFeedback(error.message,true);}
     });
-    document.getElementById('reload').addEventListener('click',()=>Promise.all([loadUsers(),loadTaskArchive()]));
+    document.getElementById('farmSources').addEventListener('click',async event=>{
+      const row=event.target.closest('[data-farm-id]');if(!row)return;
+      const rename=event.target.closest('[data-farm-rename]');const remove=event.target.closest('[data-farm-delete]');
+      if(!rename&&!remove)return;
+      const farm=telemetryFarms.find(item=>item.id===row.dataset.farmId);if(!farm)return;
+      try{
+        if(rename){const name=window.prompt('Neuer Hofname',farm.name||farm.farm_name||'');if(name===null||!name.trim())return;await api(`/api/admin/telemetry/farms/${encodeURIComponent(farm.id)}`,{method:'PATCH',body:JSON.stringify({name:name.trim()})});}
+        if(remove){if(!window.confirm(`Hof „${farm.name||farm.farm_name}“ wirklich entfernen? Die Bridge muss danach neu gekoppelt werden.`))return;await api(`/api/admin/telemetry/farms/${encodeURIComponent(farm.id)}`,{method:'DELETE'});}
+        await loadFarms();
+      }catch(error){setFeedback(error.message,true);}
+    });
+    document.getElementById('reload').addEventListener('click',()=>Promise.all([loadUsers(),loadTaskArchive(),loadFarms()]));
     document.getElementById('pairTelemetry').addEventListener('click',async()=>{
-      try{const data=await api('/api/admin/telemetry/pairing-code',{method:'POST',body:JSON.stringify({name:'FS25 Spielstand'})});document.getElementById('pairingCode').textContent=data.code;document.getElementById('pairingResult').hidden=false;setFeedback('Kopplungscode erstellt. Er gilt 15 Minuten.');}catch(error){setFeedback(error.message,true);}
+      const input=document.getElementById('newFarmName');const name=input.value.trim();
+      if(!name){setFeedback('Bitte zuerst einen Namen für den Hof eingeben.',true);input.focus();return;}
+      try{const data=await api('/api/admin/telemetry/pairing-code',{method:'POST',body:JSON.stringify({name})});document.getElementById('pairingCode').textContent=data.code;document.getElementById('pairingResult').hidden=false;setFeedback(`Kopplungscode für „${name}“ erstellt. Er gilt 15 Minuten.`);}catch(error){setFeedback(error.message,true);}
     });
     document.getElementById('search').addEventListener('input',render);
     document.getElementById('statusFilter').addEventListener('change',render);
@@ -273,7 +307,7 @@
         document.getElementById('usersPanel').hidden=!permissions.can_manage_users;
         document.getElementById('archivePanel').hidden=!(permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive);
         if(currentUser.schema_ready===false){setFeedback('Führe zuerst supabase/schema.sql im Supabase SQL Editor aus.',true);return;}
-        await Promise.all([permissions.can_manage_users?loadUsers():Promise.resolve(),(permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive)?loadTaskArchive():Promise.resolve()]);
+        await Promise.all([permissions.can_manage_users?loadUsers():Promise.resolve(),permissions.can_manage_users?loadFarms():Promise.resolve(),(permissions.can_view_archive||permissions.can_edit_archive||permissions.can_delete_archive)?loadTaskArchive():Promise.resolve()]);
       } catch(error){window.location.replace('/');}
     })();
   </script>

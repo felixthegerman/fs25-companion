@@ -396,6 +396,45 @@ app.post('/api/admin/telemetry/pairing-code', requireApprovedPermission('can_man
     res.json({ code, expires_at: expiresAt, source_id: data.id });
 });
 
+const isUuid = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+
+app.get('/api/telemetry/farms', requireApprovedPermission(), async (req, res) => {
+    const { data, error } = await supabase.from('telemetry_sources')
+        .select('id,source_name,paired_at,last_seen_at,last_payload')
+        .not('paired_at', 'is', null)
+        .order('created_at', { ascending: true });
+    if (error) return res.status(500).json({ error: 'Höfe konnten nicht geladen werden.' });
+    const farms = (data || []).map((source) => ({
+        id: source.id,
+        name: source.source_name,
+        farm_name: source.last_payload?.farm?.name || source.last_payload?.savegame?.name || source.source_name,
+        map_name: source.last_payload?.savegame?.mapName || null,
+        paired_at: source.paired_at,
+        last_seen_at: source.last_seen_at,
+        connected: Boolean(source.last_seen_at && Date.now() - new Date(source.last_seen_at).getTime() < 90000),
+    }));
+    res.json({ farms });
+});
+
+app.patch('/api/admin/telemetry/farms/:id', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    if (!isUuid(req.params.id)) return res.status(400).json({ error: 'Ungültiger Hof.' });
+    const name = String(req.body?.name || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ error: 'Bitte einen Hofnamen eingeben.' });
+    const { data, error } = await supabase.from('telemetry_sources').update({ source_name: name }).eq('id', req.params.id)
+        .select('id,source_name').single();
+    if (error) return res.status(500).json({ error: 'Hofname konnte nicht gespeichert werden.' });
+    broadcast('telemetry-changed', { sourceId: req.params.id, action: 'renamed' });
+    res.json({ farm: data });
+});
+
+app.delete('/api/admin/telemetry/farms/:id', requireApprovedPermission('can_manage_users'), async (req, res) => {
+    if (!isUuid(req.params.id)) return res.status(400).json({ error: 'Ungültiger Hof.' });
+    const { error } = await supabase.from('telemetry_sources').delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: 'Hof konnte nicht entfernt werden.' });
+    broadcast('telemetry-changed', { sourceId: req.params.id, action: 'deleted' });
+    res.json({ success: true });
+});
+
 app.get('/api/telemetry/status', requireApprovedPermission(), async (req, res) => {
     const { data, error } = await supabase.from('telemetry_sources')
         .select('id,source_name,paired_at,last_seen_at').not('paired_at', 'is', null)
@@ -457,10 +496,13 @@ app.post('/api/telemetry/ingest', async (req, res) => {
 });
 
 app.get('/api/telemetry/state', requireApprovedPermission(), async (req, res) => {
-    const { data, error } = await supabase.from('telemetry_sources').select('source_name,last_seen_at,last_payload')
-        .not('last_payload', 'is', null).order('last_seen_at', { ascending: false }).limit(1).maybeSingle();
+    const sourceId = String(req.query.sourceId || '');
+    if (sourceId && !isUuid(sourceId)) return res.status(400).json({ error: 'Ungültiger Hof.' });
+    let query = supabase.from('telemetry_sources').select('id,source_name,last_seen_at,last_payload').not('last_payload', 'is', null);
+    query = sourceId ? query.eq('id', sourceId) : query.order('last_seen_at', { ascending: false }).limit(1);
+    const { data, error } = await query.maybeSingle();
     if (error) return res.status(500).json({ error: 'Telemetriedaten konnten nicht geladen werden.' });
-    res.json({ payload: data?.last_payload || null, source_name: data?.source_name || null, last_seen_at: data?.last_seen_at || null,
+    res.json({ source_id: data?.id || null, payload: data?.last_payload || null, source_name: data?.source_name || null, last_seen_at: data?.last_seen_at || null,
         connected: Boolean(data?.last_seen_at && Date.now() - new Date(data.last_seen_at).getTime() < 90000) });
 });
 
