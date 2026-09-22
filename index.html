@@ -902,8 +902,15 @@ function setMapBackground(mapName) {
   if (!world) return;
   currentMapName = String(mapName || '');
   const fallback = '/assets/map-background.svg';
-  const apply = url => { world.style.backgroundImage = `linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('${url}')`; };
-  if (/hof\s*bergmann/i.test(currentMapName)) { apply('/assets/hof-bergmann-map.png'); return; }
+  const apply = (url, size = '100% 100%') => {
+    world.style.backgroundImage = `linear-gradient(rgba(12,18,13,.05),rgba(12,18,13,.16)), url('${url}')`;
+    world.style.backgroundSize = `100% 100%, ${size}`;
+    world.style.backgroundPosition = 'center, center';
+  };
+  // The supplied Hof Bergmann PDA is a 4096px export whose playable map
+  // occupies exactly the centred 2048px square. Crop that padding in CSS so
+  // telemetry coordinates and the visible fields use the same full viewport.
+  if (/hof\s*bergmann/i.test(currentMapName)) { apply('/assets/hof-bergmann-map.png', '200% 200%'); return; }
   const slug = mapAssetSlug(currentMapName);
   if (!slug) { apply(fallback); return; }
   if (mapAssetCache.has(slug)) { apply(mapAssetCache.get(slug)); return; }
