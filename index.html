@@ -495,13 +495,24 @@ const telemetryCropMapping = {
   ASPARAGUS_GREEN: ICON_DIR + 'asparagusgreen.png', ASPARAGUSGREEN: ICON_DIR + 'asparagusgreen.png', ASPARAGUS_WHITE: ICON_DIR + 'asparaguswhite.png', ASPARAGUSWHITE: ICON_DIR + 'asparaguswhite.png', CUCUMBER: ICON_DIR + 'cucumber.png'
 };
 const canon = raw => String(raw || '').trim().replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const telemetryCropAliases = {};
+const mappedCropKeys = Object.keys(telemetryCropMapping).sort((a,b) => b.length - a.length);
+const resolvedCropKey = raw => {
+  const key = canon(raw);
+  if (telemetryCropAliases[key]) return telemetryCropAliases[key];
+  if (telemetryCropMapping[key]) return key;
+  return mappedCropKeys.find(candidate => key.endsWith(`_${candidate}`)) || key;
+};
 const catalogKey = raw => canon(raw).toLowerCase().replace(/_/g, '');
-const cropSrc = raw => telemetryCropMapping[canon(raw)] || `${ICON_DIR}${catalogKey(raw)}.png`;
+const cropSrc = raw => {
+  const key = resolvedCropKey(raw);
+  return telemetryCropMapping[key] || `${ICON_DIR}${catalogKey(key)}.png`;
+};
 const telemetryCropNames = {};
 const cropName = raw => telemetryCropNames[canon(raw)] || i18n[lang].crops[canon(raw)] || i18n.en.crops[canon(raw)] || prettify(raw);
 const cropImg = (raw, size = 28) => {
-  const key = canon(raw);
-  return `<img src="${cropSrc(key)}" alt="${esc(cropName(key))}" title="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(key)}" data-size="${size}" decoding="sync">`;
+  const key = canon(raw), iconKey = resolvedCropKey(key);
+  return `<img src="${cropSrc(iconKey)}" alt="${esc(cropName(key))}" title="${esc(cropName(key))}" width="${size}" height="${size}" data-crop="${esc(iconKey)}" data-size="${size}" decoding="sync">`;
 };
 
 /* Built-in SVG fallbacks (24x24, currentColor) */
@@ -846,17 +857,28 @@ async function loadTelemetry() {
     if (!payload) return;
     availableFruitTypes = Array.isArray(payload.fruitTypes) ? payload.fruitTypes.filter(fruit => fruit && fruit.name) : [];
     Object.keys(telemetryCropNames).forEach(key => delete telemetryCropNames[key]);
+    Object.keys(telemetryCropAliases).forEach(key => delete telemetryCropAliases[key]);
     availableFruitTypes.forEach(fruit => {
       const key = canon(fruit.name);
       if (key && fruit.title && String(fruit.title).trim()) telemetryCropNames[key] = String(fruit.title).trim();
+      const fillKey = canon(fruit.fillTypeName);
+      if (fillKey && fruit.title && String(fruit.title).trim()) {
+        telemetryCropNames[fillKey] = String(fruit.title).trim();
+        telemetryCropAliases[fillKey] = key;
+      }
     });
     fields = (payload.fields || []).map(f => ({
       n: Number(f.number ?? f.farmlandId ?? f.id), crop: canon(f.crop || 'UNKNOWN'),
+      cropTitle: f.cropTitle || null, fillTypeName: f.fillTypeName || null,
       ha: Number(f.areaHa) || 0, owned: f.owned === true, stage: f.stage || 'fallow',
       pct: Number(f.progress) || 0, eta: f.etaDays == null ? null : Number(f.etaDays), price: f.price == null ? null : Number(f.price),
       x: f.x == null ? null : Number(f.x), z: f.z == null ? null : Number(f.z),
       ownerFarmId: f.ownerFarmId == null ? null : Number(f.ownerFarmId), ownerName: f.ownerName || null
     })).filter(f => Number.isFinite(f.n)).sort((a,b) => a.n - b.n);
+    fields.forEach(field => {
+      if (field.cropTitle) telemetryCropNames[canon(field.crop)] = String(field.cropTitle);
+      if (field.fillTypeName && field.cropTitle) telemetryCropNames[canon(field.fillTypeName)] = String(field.cropTitle);
+    });
     machines = (payload.vehicles || []).map(v => ({
       id: v.id, name: v.name || 'Fahrzeug', type: v.type || 'Fahrzeug', kind: v.kind || 'tractor',
       field: v.fieldNumber == null ? null : Number(v.fieldNumber), status: v.status || 'idle',
